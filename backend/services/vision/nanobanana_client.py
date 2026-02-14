@@ -32,28 +32,37 @@ def analyze_face_three_angles(
     left_bytes: Optional[bytes] = None,
     right_bytes: Optional[bytes] = None,
 ) -> SkinMetrics:
-    print("API KEY FOUND:", bool(os.getenv("GEMINI_API_KEY")))
+    #print("API KEY FOUND:", bool(os.getenv("GEMINI_API_KEY")))
     client = Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     parts = [
-        types.Part(text="Analyze these face images (front, left, right if provided)."),
+        types.Part(text="FRONT IMAGE:"),
         _img_part(front_bytes),
     ]
+
     if left_bytes:
-        parts += [types.Part(text="LEFT ANGLE:"), _img_part(left_bytes)]
+        parts += [types.Part(text="LEFT IMAGE:"), _img_part(left_bytes)]
+
     if right_bytes:
-        parts += [types.Part(text="RIGHT ANGLE:"), _img_part(right_bytes)]
+        parts += [types.Part(text="RIGHT IMAGE:"), _img_part(right_bytes)]
 
     prompt = """
-Return scores 0-100 for:
-- acne, redness, oiliness, dryness, texture
-Also return:
-- confidence (0-100)
-- retake_required boolean
-- retake_reasons (list)
-- notes (list of short neutral observations like "shine on T-zone", "scattered small blemishes")
+You will receive 1 to 3 images labeled FRONT IMAGE, LEFT IMAGE, RIGHT IMAGE.
 
-Remember: cosmetic guidance only; no diagnosis.
+Use ALL provided images to estimate cosmetic skin feature scores:
+- acne, redness, oiliness, dryness, texture (each 0-100)
+
+Also return:
+- confidence (0-100): Higher when all 3 angles are provided and images are clear.
+  If only 1 image is provided, lower confidence accordingly.
+- retake_required (boolean)
+- retake_reasons (list of short strings)
+- notes (list of short, neutral, non-diagnostic observations)
+
+Rules:
+- Do NOT diagnose medical conditions and do NOT name diseases.
+- If images are too dark/blurry/not centered/extreme angles or face not visible, set retake_required=true and confidence<=40.
+Return ONLY JSON matching the schema.
 """
 
     resp = client.models.generate_content(

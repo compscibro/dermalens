@@ -16,7 +16,8 @@ result = run_ai(
     left_bytes=None,
     right_bytes=None,
     quiz=quiz,
-    priority="acne"
+    priority="acne",
+    weeks_on_plan=3
 )
 
 print(result)
