@@ -19,6 +19,7 @@ struct SkinAnalysisView: View {
                 overallScoreCard
                 metricsGrid
                 summaryCard
+                aiDisclaimer
                 nextButton
             }
             .padding(DLSpacing.md)
@@ -161,6 +162,20 @@ struct SkinAnalysisView: View {
         .padding(DLSpacing.md)
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: DLRadius.lg))
+    }
+
+    // MARK: - Disclaimer
+
+    private var aiDisclaimer: some View {
+        HStack(spacing: DLSpacing.xs) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 11))
+            Text("DermaLens isn't human. It can make mistakes, so double check important info. For medical advice, consult with medical professionals.")
+                .font(.system(size: 11))
+        }
+        .foregroundStyle(.tertiary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, DLSpacing.xs)
     }
 
     // MARK: - Next

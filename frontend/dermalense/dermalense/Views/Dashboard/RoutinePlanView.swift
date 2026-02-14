@@ -41,6 +41,7 @@ struct RoutinePlanView: View {
         ScrollView {
             VStack(spacing: DLSpacing.lg) {
                 headerSection
+                aiDisclaimer
                 sectionPicker
                 routineSteps
                 chatButton
@@ -67,6 +68,19 @@ struct RoutinePlanView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, DLSpacing.md)
         }
+    }
+
+    // MARK: - Disclaimer
+
+    private var aiDisclaimer: some View {
+        HStack(spacing: DLSpacing.xs) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 11))
+            Text("DermaLens isn't human. It can make mistakes, so double check important info. For medical advice, consult with medical professionals.")
+                .font(.system(size: 11))
+        }
+        .foregroundStyle(.tertiary)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Section Picker

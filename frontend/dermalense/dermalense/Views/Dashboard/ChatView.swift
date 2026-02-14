@@ -20,6 +20,7 @@ struct ChatView: View {
             messagesScrollView
             Divider()
             inputBar
+            aiDisclaimer
         }
     }
 
@@ -232,6 +233,21 @@ struct ChatView: View {
         }
         .padding(.horizontal, DLSpacing.md)
         .padding(.vertical, DLSpacing.sm)
+    }
+
+    // MARK: - Disclaimer
+
+    private var aiDisclaimer: some View {
+        HStack(spacing: DLSpacing.xs) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 10))
+            Text("DermaLens isn't human. It can make mistakes, so double check important info. For medical advice, consult with medical professionals.")
+                .font(.system(size: 10))
+        }
+        .foregroundStyle(.tertiary)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, DLSpacing.md)
+        .padding(.bottom, DLSpacing.xs)
     }
 
     // MARK: - Actions
