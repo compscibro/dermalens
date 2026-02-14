@@ -1,1 +1,5 @@
 #test for push
+
+google-genai
+pydantic
+python-dotenv
