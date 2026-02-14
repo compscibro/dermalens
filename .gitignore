@@ -30,10 +30,6 @@ Thumbs.db
 *.log
 logs/
 
-# Xcode / iOS
-**/xcuserdata/
-**/*.xcuserstate
-
 # Testing
 .pytest_cache/
 .coverage

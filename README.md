@@ -1,316 +1,353 @@
-# DermaLens Backend API
+# 🚀 DermaLens Backend - DynamoDB Edition
 
-AI-powered skincare analysis platform backend built with FastAPI, PostgreSQL, and integrates with NanoBanana AI and Gemini AI.
+## ✨ Key Features
 
-## 🏗️ Project Structure
+- ✅ **DynamoDB** instead of PostgreSQL (NoSQL, serverless, pay-per-use)
+- ✅ **IAM Roles** instead of access keys (AWS security best practice!)
+- ✅ **No RDS** needed (saves ~$15/month minimum)
+- ✅ **Auto-scaling** (handles traffic spikes automatically)
+- ✅ **Free tier** available (25GB + 200M requests/month)
+- ✅ **Perfect for single-user-per-account** architecture
+
+## 🎯 Why This Version?
+
+### You said:
+> "I do not want an RDS database, rework the whole backend to be in DynamoDB, since the user is only going to have their own account to access I also plan to use an IAM role on AWS"
+
+### Perfect! This version is designed for:
+1. **Each user only accesses their own data** ✅
+2. **No cross-user queries needed** ✅  
+3. **Running on AWS with IAM roles** ✅
+4. **Cost optimization** ✅
+5. **Auto-scaling** ✅
+
+## 📊 Architecture
+
+### Database Design
 
 ```
-dermalens_backend/
-├── app/
-│   ├── main.py                          # FastAPI application entry point
-│   ├── core/
-│   │   ├── config.py                    # Configuration settings
-│   │   └── security.py                  # JWT auth & security utilities
-│   ├── db/
-│   │   └── session.py                   # Database session management
-│   ├── models/                          # SQLAlchemy ORM models
-│   │   ├── __init__.py
-│   │   ├── user.py                      # User model
-│   │   ├── scan.py                      # Facial scan model
-│   │   ├── score_delta.py               # Score tracking model
-│   │   ├── treatment_plan.py            # Treatment routine model
-│   │   └── chat_message.py              # Chat history model
-│   ├── schemas/                         # Pydantic schemas
-│   │   ├── __init__.py
-│   │   ├── user.py                      # User schemas
-│   │   ├── scan.py                      # Scan schemas
-│   │   ├── treatment_plan.py            # Treatment plan schemas
-│   │   └── chat.py                      # Chat schemas
-│   ├── api/
-│   │   └── v1/
-│   │       ├── router.py                # Main API router
-│   │       └── routes/
-│   │           ├── auth.py              # Authentication endpoints
-│   │           ├── scans.py             # Scan endpoints
-│   │           ├── routines.py          # Treatment plan endpoints
-│   │           └── chat.py              # Chat endpoints
-│   └── services/                        # Business logic services
-│       ├── storage/
-│       │   └── s3_service.py            # AWS S3 integration
-│       ├── vision/
-│       │   └── nanobanana_service.py    # NanoBanana AI integration
-│       ├── chat_ai/
-│       │   └── gemini_service.py        # Gemini AI chat integration
-│       └── routine_engine/
-│           └── routine_generator.py     # Treatment routine generation
-├── alembic/                             # Database migrations
-│   ├── env.py
-│   └── versions/
-├── .env                                 # Environment variables (create from .env.example)
-├── .env.example                         # Environment template
-├── alembic.ini                          # Alembic configuration
-├── requirements.txt                     # Python dependencies
-└── README.md                            # This file
+DynamoDB Tables:
+├── dermalens-users
+│   ├── PK: user_id
+│   └── GSI: email-index
+├── dermalens-scans
+│   ├── PK: user_id
+│   ├── SK: scan_id
+│   └── LSI: scan-date-index
+├── dermalens-treatment-plans
+│   ├── PK: user_id
+│   └── SK: plan_id
+└── dermalens-chat-messages
+    ├── PK: user_id
+    ├── SK: message_id
+    └── LSI: session-index
 ```
 
-## 🚀 Quick Start
+### IAM Role Authentication
 
-### Prerequisites
+**No Access Keys Needed!**
+```
+EC2/ECS/Lambda → IAM Role → DynamoDB/S3
+(Credentials provided automatically by AWS)
+```
 
-- Python 3.11+
-- PostgreSQL 14+
-- AWS S3 bucket
-- NanoBanana API key
-- Gemini API key
+## ⚡ Quick Start
 
-### Installation
+### Local Testing with DynamoDB Local
 
-1. **Clone the repository**
 ```bash
-git clone <your-repo-url>
-cd dermalens_backend
-```
+# 1. Start DynamoDB Local
+docker run -d -p 8000:8000 amazon/dynamodb-local
 
-2. **Create virtual environment**
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. **Install dependencies**
-```bash
+# 2. Install dependencies
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-```
 
-4. **Set up environment variables**
-```bash
+# 3. Configure for local
 cp .env.example .env
-# Edit .env with your actual values
+# Add to .env:
+AWS_DYNAMODB_ENDPOINT=http://localhost:8000
+
+# 4. Start server
+uvicorn app.main:app --reload
 ```
 
-5. **Set up PostgreSQL database**
+Visit: **http://localhost:8000/api/v1/docs**
+
+Tables are created automatically on startup!
+
+### Using Real AWS DynamoDB
+
 ```bash
-createdb dermalens
+# 1. Configure AWS CLI (temporary for local dev)
+aws configure
+# Enter your AWS credentials and region
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env with your settings
+
+# 4. Start server
+uvicorn app.main:app --reload
 ```
 
-6. **Run database migrations**
+## 🚀 Production Deployment
+
+### Step 1: Create IAM Role
+
 ```bash
-alembic upgrade head
+# Create role for EC2
+aws iam create-role \
+  --role-name DermaLensAppRole \
+  --assume-role-policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Principal": {"Service": "ec2.amazonaws.com"},
+      "Action": "sts:AssumeRole"
+    }]
+  }'
+
+# Attach DynamoDB permissions
+aws iam attach-role-policy \
+  --role-name DermaLensAppRole \
+  --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+
+# Attach S3 permissions
+aws iam attach-role-policy \
+  --role-name DermaLensAppRole \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
 ```
 
-7. **Run the application**
+### Step 2: Launch EC2 with IAM Role
+
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Create instance profile
+aws iam create-instance-profile \
+  --instance-profile-name DermaLensAppProfile
+
+# Add role to profile
+aws iam add-role-to-instance-profile \
+  --instance-profile-name DermaLensAppProfile \
+  --role-name DermaLensAppRole
+
+# Launch EC2 with IAM role
+aws ec2 run-instances \
+  --image-id ami-0c55b159cbfafe1f0 \
+  --instance-type t2.micro \
+  --iam-instance-profile Name=DermaLensAppProfile \
+  --key-name your-key \
+  --security-groups your-sg
 ```
 
-The API will be available at `http://localhost:8000`
+### Step 3: Deploy App
 
-API Documentation: `http://localhost:8000/api/v1/docs`
+```bash
+# SSH into EC2
+ssh -i your-key.pem ubuntu@your-ec2-ip
 
-## 📋 Environment Variables
+# Install Python
+sudo apt update && sudo apt install -y python3-pip python3-venv
 
-Key environment variables (see `.env.example` for complete list):
+# Clone and setup
+git clone your-repo
+cd dermalens_backend_dynamodb
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Configure
+cp .env.example .env
+nano .env  # Set your configs, NO AWS KEYS NEEDED!
+
+# Run
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+## 📁 Project Structure
+
+```
+dermalens_backend_dynamodb/
+├── app/
+│   ├── main.py                       # FastAPI app (DynamoDB version)
+│   ├── core/
+│   │   ├── config.py                 # Settings (no AWS keys!)
+│   │   └── security.py               # JWT auth
+│   ├── db/
+│   │   └── dynamodb.py               # DynamoDB client + table setup
+│   ├── repositories/                 # Data access layer
+│   │   ├── user_repository.py        # User CRUD operations
+│   │   ├── scan_repository.py        # Scan operations
+│   │   └── treatment_plan_repository.py
+│   ├── schemas/                      # Pydantic models
+│   ├── api/v1/routes/               # API endpoints
+│   │   └── auth_dynamodb.py         # Auth endpoints
+│   └── services/                     # Business logic
+├── DYNAMODB_GUIDE.md                # Comprehensive DynamoDB guide
+├── requirements.txt                  # Dependencies
+├── .env.example                     # Config template
+└── README.md                        # This file
+```
+
+## 🔑 Environment Variables
 
 ```env
-# Database
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/dermalens
+# NO AWS ACCESS KEYS NEEDED!
+# IAM role provides them automatically
 
-# Security
-SECRET_KEY=your-secret-key-here
+# AWS Config
+AWS_REGION=us-east-1
 
-# AWS S3
-AWS_ACCESS_KEY_ID=your-aws-key
-AWS_SECRET_ACCESS_KEY=your-aws-secret
+# DynamoDB Tables
+DYNAMODB_USERS_TABLE=dermalens-users
+DYNAMODB_SCANS_TABLE=dermalens-scans
+DYNAMODB_PLANS_TABLE=dermalens-treatment-plans
+DYNAMODB_CHAT_TABLE=dermalens-chat-messages
+
+# S3 (also uses IAM role)
 S3_BUCKET_NAME=dermalens-images
 
-# AI Services
-NANOBANANA_API_KEY=your-nanobanana-key
+# App Config
+SECRET_KEY=your-secret-key
 GEMINI_API_KEY=your-gemini-key
 ```
 
-## 🔑 API Endpoints
-
-### Authentication
-- `POST /api/v1/auth/register` - Register new user
-- `POST /api/v1/auth/login` - Login user
-- `GET /api/v1/auth/me` - Get current user profile
-- `PATCH /api/v1/auth/me` - Update user profile
-- `POST /api/v1/auth/change-password` - Change password
-
-### Scans
-- `POST /api/v1/scans/presign` - Get presigned URL for image upload
-- `POST /api/v1/scans/submit` - Submit scan for processing
-- `GET /api/v1/scans/history` - Get scan history
-- `GET /api/v1/scans/{scan_id}` - Get scan details
-- `GET /api/v1/scans/{scan_id}/deltas` - Get score changes
-
-### Treatment Plans
-- `POST /api/v1/routines/` - Create treatment plan
-- `GET /api/v1/routines/current` - Get active treatment plan
-- `PATCH /api/v1/routines/current` - Adjust treatment plan
-- `GET /api/v1/routines/history` - Get plan history
-- `GET /api/v1/routines/recommendations/{concern}` - Get product recommendations
-
-### Chat
-- `POST /api/v1/chat/message` - Send chat message
-- `GET /api/v1/chat/history` - Get chat history
-- `DELETE /api/v1/chat/session/{session_id}` - Delete chat session
-
-## 🗄️ Database Models
-
-### User
-- Authentication and profile information
-- Skin type and primary concern
-- Relationships: scans, treatment_plans, chat_messages
-
-### Scan
-- Facial image references (S3 keys)
-- AI analysis scores (acne, redness, oiliness, dryness, etc.)
-- Processing status and metadata
-
-### ScoreDelta
-- Score changes between scans
-- Improvement/worsening tracking
-- Significance flags
-
-### TreatmentPlan
-- Locked routine (AM/PM steps)
-- Lock period (14-28 days)
-- Product recommendations
-- Adjustment tracking
-
-### ChatMessage
-- Conversation history
-- Context references (current scan/plan)
-- AI metadata
-
-## 🔄 Key Features
-
-### 1. Image Upload Flow
-```
-Client requests presigned URL → Upload to S3 → Submit scan → Background processing → AI analysis
-```
-
-### 2. Treatment Lock Logic
-- Plans are locked for 14-28 days
-- Weekly scans track progress
-- Adjustments only allowed if:
-  - Score decline > threshold
-  - Severe irritation reported
-  - Lock period expired
-
-### 3. Score Tracking
-- Baseline scan establishes starting point
-- Weekly scans compare against baseline
-- Delta calculations show improvement/decline
-- Trends inform adjustment decisions
-
-### 4. AI Chat Context
-- Maintains conversation history
-- Aware of current treatment status
-- References latest scan results
-- Cannot modify locked plans
-
 ## 🧪 Testing
 
+### Register a User
 ```bash
-# Install test dependencies
-pip install pytest pytest-asyncio httpx
-
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=app tests/
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "testpass123",
+    "full_name": "Test User"
+  }'
 ```
 
-## 🚢 Deployment
-
-### Docker Deployment (Recommended)
-
+### Login
 ```bash
-# Build image
-docker build -t dermalens-api .
-
-# Run container
-docker run -d -p 8000:8000 --env-file .env dermalens-api
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "testpass123"
+  }'
 ```
 
-### Manual Deployment
-
-1. Set up production database
-2. Configure environment variables
-3. Run migrations: `alembic upgrade head`
-4. Use production ASGI server:
+### View Tables (Local)
 ```bash
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+# List tables
+aws dynamodb list-tables --endpoint-url http://localhost:8000
+
+# View users
+aws dynamodb scan \
+  --table-name dermalens-users \
+  --endpoint-url http://localhost:8000
 ```
 
-## 📊 Database Migrations
+## 💰 Cost Comparison
 
-```bash
-# Create new migration
-alembic revision --autogenerate -m "description"
+### PostgreSQL RDS (Previous):
+- Minimum: ~$15/month (db.t3.micro)
+- Always running
+- Manual scaling
 
-# Apply migrations
-alembic upgrade head
+### DynamoDB (Current):
+- Free tier: 25GB + 200M requests/month
+- Pay per use: $0-5/month for small apps
+- Auto-scaling
+- Serverless
 
-# Rollback one migration
-alembic downgrade -1
+## 🔒 Security
 
-# View migration history
-alembic history
+### IAM Role Policy (Minimal Permissions)
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query"
+      ],
+      "Resource": "arn:aws:dynamodb:*:*:table/dermalens-*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::dermalens-images/*"
+    }
+  ]
+}
 ```
 
-## 🔒 Security Notes
+## 📚 Key Differences from PostgreSQL
 
-- JWT tokens expire after 7 days (configurable)
-- Passwords hashed with bcrypt
-- S3 presigned URLs expire after 1 hour
-- CORS configured for specific origins
-- Rate limiting recommended for production
+| Feature | PostgreSQL | DynamoDB |
+|---------|-----------|----------|
+| Auth | Access Keys | IAM Role ✅ |
+| Database | RDS | DynamoDB ✅ |
+| Cost | Fixed $15+ | Pay-per-use $0-5 |
+| Scaling | Manual | Auto ✅ |
+| Setup | Complex | Simple ✅ |
+| Migrations | Alembic | Auto-create |
 
 ## 🐛 Troubleshooting
 
-### Database Connection Issues
-- Verify PostgreSQL is running
-- Check DATABASE_URL format
-- Ensure asyncpg is installed
+### IAM Role Not Working
+```bash
+# Verify role is attached
+aws ec2 describe-instances --instance-ids i-xxxxx
 
-### S3 Upload Failures
-- Verify AWS credentials
-- Check bucket permissions
-- Confirm CORS settings on bucket
+# Check credentials
+curl http://169.254.169.254/latest/meta-data/iam/security-credentials/
+```
 
-### AI Service Errors
-- Validate API keys
-- Check service quotas
-- Review request/response logs
+### DynamoDB Local Connection
+```bash
+# Restart DynamoDB Local
+docker restart $(docker ps -q --filter ancestor=amazon/dynamodb-local)
 
-## 📝 Development Guidelines
+# Verify it's running
+curl http://localhost:8000
+```
 
-### Adding New Endpoints
-1. Create route in appropriate `routes/` file
-2. Define Pydantic schemas in `schemas/`
-3. Add business logic to `services/`
-4. Update this README
+## 📖 Documentation
 
-### Database Changes
-1. Modify models in `models/`
-2. Create migration: `alembic revision --autogenerate`
-3. Review generated migration
-4. Apply: `alembic upgrade head`
+- **DYNAMODB_GUIDE.md** - Complete DynamoDB setup and deployment guide
+- **README.md** - This file (quick start)
+- **/api/v1/docs** - Interactive API documentation
 
-## 📄 License
+## 🎯 Next Steps
 
-[Your License Here]
+1. ✅ Test locally with DynamoDB Local
+2. ✅ Create IAM role in AWS
+3. ✅ Deploy to EC2 with IAM role attached
+4. ✅ Tables auto-create on first run
+5. ✅ Test all endpoints
+6. ✅ Monitor with CloudWatch
 
-## 👥 Contributors
+## 🎉 Benefits Summary
 
-[Your Team/Contributors]
+- **No access keys** to manage or leak ✅
+- **No RDS costs** (~$180/year saved) ✅
+- **Auto-scaling** for traffic spikes ✅
+- **Free tier** for development ✅
+- **Serverless** - no servers to manage ✅
+- **Perfect isolation** - users can't see each other's data ✅
 
-## 🤝 Support
+---
 
-For issues and questions:
-- GitHub Issues: [Your Repo URL]
-- Email: [Your Support Email]
+**Ready to deploy!** No RDS, no access keys, just pure serverless goodness! 🚀
