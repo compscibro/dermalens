@@ -101,6 +101,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+<<<<<<< HEAD
 env/
 venv/
 ENV/
@@ -149,3 +150,6 @@ alembic/versions/*.py
 uploads/
 temp/
 logs/
+=======
+.DS_Store
+>>>>>>> 83b6281d144fac26bf883654c60e7fd5e1ac7f4c

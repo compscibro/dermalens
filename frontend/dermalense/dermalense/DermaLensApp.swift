@@ -1,0 +1,20 @@
+//
+//  DermaLensApp.swift
+//  dermalense
+//
+//  Created by Mohammed Abdur Rahman on 2/14/26.
+//
+
+import SwiftUI
+
+@main
+struct DermaLensApp: App {
+    @State private var appState = AppState()
+
+    var body: some Scene {
+        WindowGroup {
+            MainTabView()
+                .environment(appState)
+        }
+    }
+}
