@@ -6,20 +6,10 @@
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
-		<key>UISceneConfigurations</key>
-		<dict>
-			<key>UIWindowSceneSessionRoleApplication</key>
-			<array>
-				<dict>
-					<key>UISceneConfigurationName</key>
-					<string>Default Configuration</string>
-					<key>UISceneDelegateClassName</key>
-					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-					<key>UISceneStoryboardFile</key>
-					<string>Main</string>
-				</dict>
-			</array>
-		</dict>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>DermaLens needs camera access to take photos of your skin for analysis.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>DermaLens needs photo library access to select skin photos for analysis.</string>
 </dict>
 </plist>
