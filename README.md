@@ -1,316 +1,183 @@
-# DermaLens Backend API
+# 🧴 DermaLens
 
-AI-powered skincare analysis platform backend built with FastAPI, PostgreSQL, and integrates with NanoBanana AI and Gemini AI.
+AI-powered skincare analysis that turns a few selfies into personalized routines. Snap three photos, answer a quick skin quiz, and receive metric-level analysis with a morning-and-evening plan — all in under a minute.
 
-## 🏗️ Project Structure
+## ✨ Features
+
+### Intelligent Skin Analysis
+- [x] **Multi-Angle Scanning:** Upload front, left, and right photos for comprehensive coverage
+- [x] **AI-Powered Metrics:** Gemini Vision scores acne, redness, oiliness, dryness, and texture (0-100)
+- [x] **Overall Health Score:** Single composite score so you know where you stand at a glance
+- [x] **Image Quality Validation:** Automatically flags blurry or unusable photos and prompts a retake
+
+### Personalized Skincare Routines
+- [x] **Morning & Evening Plans:** Step-by-step routines tailored to your metrics and concerns
+- [x] **Evidence-Based Ingredients:** Active ingredient selection backed by dermatological rules (BHA, AHA, niacinamide, ceramides)
+- [x] **Safety-First Logic:** Ingredient conflict detection and frequency reduction for sensitive skin
+- [x] **Plan Lock Policy:** Encourages sticking with a routine for at least two weeks before changes
+
+### AI Skincare Chat
+- [x] **Context-Aware Guidance:** The AI knows your latest scan, routine, and concerns
+- [x] **Quick Action Chips:** One-tap prompts for common questions
+- [x] **Session History:** Conversations persist and can be resumed
+- [x] **Responsible Boundaries:** Recommends a dermatologist for serious concerns — never diagnoses
+
+### Account & Progress Tracking
+- [x] **Scan History:** Every analysis saved and accessible from your profile
+- [x] **Score Trend Visualization:** Track skin health over time with a bar chart
+- [x] **Detail Drill-Down:** Tap any past scan to see full metrics and summary
+- [x] **Profile Management:** Edit name, username, and avatar
+
+### Built for Demo
+- [x] **Fresh Start on Launch:** App resets to the signup screen every run for live presentations
+- [x] **One-Tap Flow Reset:** Restart the analysis workflow without losing scan history
+
+## 🧩 Architecture
+
+DermaLens is a full-stack application with a native iOS client and a stateless Python API. All persistence lives in AWS S3 — no database required.
 
 ```
-dermalens_backend/
-├── app/
-│   ├── main.py                          # FastAPI application entry point
-│   ├── core/
-│   │   ├── config.py                    # Configuration settings
-│   │   └── security.py                  # JWT auth & security utilities
-│   ├── db/
-│   │   └── session.py                   # Database session management
-│   ├── models/                          # SQLAlchemy ORM models
-│   │   ├── __init__.py
-│   │   ├── user.py                      # User model
-│   │   ├── scan.py                      # Facial scan model
-│   │   ├── score_delta.py               # Score tracking model
-│   │   ├── treatment_plan.py            # Treatment routine model
-│   │   └── chat_message.py              # Chat history model
-│   ├── schemas/                         # Pydantic schemas
-│   │   ├── __init__.py
-│   │   ├── user.py                      # User schemas
-│   │   ├── scan.py                      # Scan schemas
-│   │   ├── treatment_plan.py            # Treatment plan schemas
-│   │   └── chat.py                      # Chat schemas
-│   ├── api/
-│   │   └── v1/
-│   │       ├── router.py                # Main API router
-│   │       └── routes/
-│   │           ├── auth.py              # Authentication endpoints
-│   │           ├── scans.py             # Scan endpoints
-│   │           ├── routines.py          # Treatment plan endpoints
-│   │           └── chat.py              # Chat endpoints
-│   └── services/                        # Business logic services
-│       ├── storage/
-│       │   └── s3_service.py            # AWS S3 integration
-│       ├── vision/
-│       │   └── nanobanana_service.py    # NanoBanana AI integration
-│       ├── chat_ai/
-│       │   └── gemini_service.py        # Gemini AI chat integration
-│       └── routine_engine/
-│           └── routine_generator.py     # Treatment routine generation
-├── alembic/                             # Database migrations
-│   ├── env.py
-│   └── versions/
-├── .env                                 # Environment variables (create from .env.example)
-├── .env.example                         # Environment template
-├── alembic.ini                          # Alembic configuration
-├── requirements.txt                     # Python dependencies
-└── README.md                            # This file
+┌─────────────────────────────┐
+│         iOS Client          │
+│  SwiftUI · Observation · S3 │
+└──────────────┬──────────────┘
+               │ REST (JSON + Multipart)
+┌──────────────▼──────────────┐
+│        FastAPI Server       │
+│  Stateless · S3-backed      │
+├──────┬──────────┬───────────┤
+│Gemini│  Routine │    S3     │
+│Vision│  Engine  │  Storage  │
+└──────┴──────────┴───────────┘
 ```
 
-## 🚀 Quick Start
+### Source Files
 
-### Prerequisites
+**Backend** (`backend/`)
+| File | Purpose |
+|------|---------|
+| `main.py` | FastAPI app entry point, CORS, health check |
+| `api/v1/routes/users.py` | Profile auto-creation and updates |
+| `api/v1/routes/scans.py` | Photo upload, AI pipeline trigger |
+| `api/v1/routes/routines.py` | Routine retrieval by scan or latest |
+| `api/v1/routes/chat.py` | AI chat with context injection |
+| `services/ai_pipeline.py` | Orchestrates vision, scoring, and routine generation |
+| `services/vision/gemini_vision_service.py` | Gemini structured output for skin metrics |
+| `services/routine_engine/engine.py` | Rule-based AM/PM routine builder |
+| `services/chat_ai/gemini_service.py` | Context-aware Gemini chat |
+| `services/storage/s3_service.py` | S3 JSON and image operations |
 
+**iOS** (`frontend/dermalense/dermalense/`)
+| File | Purpose |
+|------|---------|
+| `DermaLensApp.swift` | App entry point, onboarding gate |
+| `Models.swift` | All data models and `@Observable` AppState |
+| `Theme.swift` | Design tokens (colors, spacing, typography, radii) |
+| `Services/APIService.swift` | Singleton networking layer with DTO conversion |
+| `Views/Dashboard/DashboardView.swift` | 5-step wizard with progressive disclosure |
+| `Views/Dashboard/ConcernsFormView.swift` | Skin type, concerns, and sensitivity form |
+| `Views/Dashboard/PhotoUploadView.swift` | 3-photo picker with compression and upload |
+| `Views/Dashboard/SkinAnalysisView.swift` | Animated score ring and metric grid |
+| `Views/Dashboard/RoutinePlanView.swift` | Timeline-style morning/evening/weekly steps |
+| `Views/Dashboard/ChatView.swift` | AI chat with quick actions and typing indicator |
+| `Views/Account/AccountView.swift` | Profile, stats, and scan history |
+
+## 💻 Tech Stack
+
+**iOS:** Swift, SwiftUI, Observation, PhotosUI, URLSession
+
+**Backend:** Python, FastAPI, Pydantic, boto3, google-genai, Pillow
+
+**Infrastructure:** AWS S3, AWS EC2 (t3.micro), Gemini 2.5 Flash
+
+## 📦 Installation
+
+### Requirements
+- Xcode 26.1 or later
+- iOS 26.1+ (simulator or physical device)
 - Python 3.11+
-- PostgreSQL 14+
 - AWS S3 bucket
-- NanoBanana API key
-- Gemini API key
+- Google Gemini API key
 
-### Installation
+### Clone the repository
 
-1. **Clone the repository**
 ```bash
-git clone <your-repo-url>
-cd dermalens_backend
+git clone https://github.com/compscibro/dermalens.git
+cd dermalens
 ```
 
-2. **Create virtual environment**
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+### Backend
 
-3. **Install dependencies**
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-```
 
-4. **Set up environment variables**
-```bash
+# Configure environment
 cp .env.example .env
-# Edit .env with your actual values
+# Edit .env with your AWS and Gemini credentials
+
+# Start the server
+python -m backend.main
 ```
 
-5. **Set up PostgreSQL database**
-```bash
-createdb dermalens
+API available at `http://localhost:8000` | Docs at `http://localhost:8000/api/v1/docs`
+
+### iOS
+
+Open the Xcode project and run:
+
+```
+frontend/dermalense/dermalense.xcodeproj
 ```
 
-6. **Run database migrations**
-```bash
-alembic upgrade head
-```
+Select the **dermalense** scheme, choose a simulator (iPhone 17 Pro recommended), and press `Cmd + R`.
 
-7. **Run the application**
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The API will be available at `http://localhost:8000`
-
-API Documentation: `http://localhost:8000/api/v1/docs`
-
-## 📋 Environment Variables
-
-Key environment variables (see `.env.example` for complete list):
-
-```env
-# Database
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/dermalens
-
-# Security
-SECRET_KEY=your-secret-key-here
-
-# AWS S3
-AWS_ACCESS_KEY_ID=your-aws-key
-AWS_SECRET_ACCESS_KEY=your-aws-secret
-S3_BUCKET_NAME=dermalens-images
-
-# AI Services
-NANOBANANA_API_KEY=your-nanobanana-key
-GEMINI_API_KEY=your-gemini-key
-```
+> **Note:** To run on a physical device, update the `baseURL` in `Services/APIService.swift` to your server's IP address and add an ATS exception in `Info.plist`.
 
 ## 🔑 API Endpoints
 
-### Authentication
-- `POST /api/v1/auth/register` - Register new user
-- `POST /api/v1/auth/login` - Login user
-- `GET /api/v1/auth/me` - Get current user profile
-- `PATCH /api/v1/auth/me` - Update user profile
-- `POST /api/v1/auth/change-password` - Change password
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/users/profile?email={email}` | Get or auto-create user profile |
+| `PUT` | `/users/profile?email={email}` | Update profile fields |
+| `POST` | `/scans/upload?email={email}` | Upload 3 photos + concerns, run AI analysis |
+| `GET` | `/scans/{scanId}?email={email}` | Get scan results |
+| `GET` | `/scans/history/list?email={email}` | List all scans |
+| `GET` | `/routines/{scanId}?email={email}` | Get routine for a scan |
+| `GET` | `/routines/latest/plan?email={email}` | Get most recent routine |
+| `POST` | `/chat/message?email={email}` | Send message, receive AI response |
+| `GET` | `/chat/history?email={email}` | Get chat history |
+| `GET` | `/health` | Health check |
 
-### Scans
-- `POST /api/v1/scans/presign` - Get presigned URL for image upload
-- `POST /api/v1/scans/submit` - Submit scan for processing
-- `GET /api/v1/scans/history` - Get scan history
-- `GET /api/v1/scans/{scan_id}` - Get scan details
-- `GET /api/v1/scans/{scan_id}/deltas` - Get score changes
+All endpoints are prefixed with `/api/v1`.
 
-### Treatment Plans
-- `POST /api/v1/routines/` - Create treatment plan
-- `GET /api/v1/routines/current` - Get active treatment plan
-- `PATCH /api/v1/routines/current` - Adjust treatment plan
-- `GET /api/v1/routines/history` - Get plan history
-- `GET /api/v1/routines/recommendations/{concern}` - Get product recommendations
+## 🚦 Roadmap
 
-### Chat
-- `POST /api/v1/chat/message` - Send chat message
-- `GET /api/v1/chat/history` - Get chat history
-- `DELETE /api/v1/chat/session/{session_id}` - Delete chat session
+**Next**
+- [ ] HTTPS with a proper domain and SSL certificate
+- [ ] User authentication (JWT or OAuth)
 
-## 🗄️ Database Models
+**Coming Soon**
+- [ ] Push notifications for routine reminders
+- [ ] Progress photos side-by-side comparison
+- [ ] Weekly scan reminders with trend summaries
 
-### User
-- Authentication and profile information
-- Skin type and primary concern
-- Relationships: scans, treatment_plans, chat_messages
-
-### Scan
-- Facial image references (S3 keys)
-- AI analysis scores (acne, redness, oiliness, dryness, etc.)
-- Processing status and metadata
-
-### ScoreDelta
-- Score changes between scans
-- Improvement/worsening tracking
-- Significance flags
-
-### TreatmentPlan
-- Locked routine (AM/PM steps)
-- Lock period (14-28 days)
-- Product recommendations
-- Adjustment tracking
-
-### ChatMessage
-- Conversation history
-- Context references (current scan/plan)
-- AI metadata
-
-## 🔄 Key Features
-
-### 1. Image Upload Flow
-```
-Client requests presigned URL → Upload to S3 → Submit scan → Background processing → AI analysis
-```
-
-### 2. Treatment Lock Logic
-- Plans are locked for 14-28 days
-- Weekly scans track progress
-- Adjustments only allowed if:
-  - Score decline > threshold
-  - Severe irritation reported
-  - Lock period expired
-
-### 3. Score Tracking
-- Baseline scan establishes starting point
-- Weekly scans compare against baseline
-- Delta calculations show improvement/decline
-- Trends inform adjustment decisions
-
-### 4. AI Chat Context
-- Maintains conversation history
-- Aware of current treatment status
-- References latest scan results
-- Cannot modify locked plans
-
-## 🧪 Testing
-
-```bash
-# Install test dependencies
-pip install pytest pytest-asyncio httpx
-
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=app tests/
-```
-
-## 🚢 Deployment
-
-### Docker Deployment (Recommended)
-
-```bash
-# Build image
-docker build -t dermalens-api .
-
-# Run container
-docker run -d -p 8000:8000 --env-file .env dermalens-api
-```
-
-### Manual Deployment
-
-1. Set up production database
-2. Configure environment variables
-3. Run migrations: `alembic upgrade head`
-4. Use production ASGI server:
-```bash
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
-```
-
-## 📊 Database Migrations
-
-```bash
-# Create new migration
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
-
-# Rollback one migration
-alembic downgrade -1
-
-# View migration history
-alembic history
-```
-
-## 🔒 Security Notes
-
-- JWT tokens expire after 7 days (configurable)
-- Passwords hashed with bcrypt
-- S3 presigned URLs expire after 1 hour
-- CORS configured for specific origins
-- Rate limiting recommended for production
-
-## 🐛 Troubleshooting
-
-### Database Connection Issues
-- Verify PostgreSQL is running
-- Check DATABASE_URL format
-- Ensure asyncpg is installed
-
-### S3 Upload Failures
-- Verify AWS credentials
-- Check bucket permissions
-- Confirm CORS settings on bucket
-
-### AI Service Errors
-- Validate API keys
-- Check service quotas
-- Review request/response logs
-
-## 📝 Development Guidelines
-
-### Adding New Endpoints
-1. Create route in appropriate `routes/` file
-2. Define Pydantic schemas in `schemas/`
-3. Add business logic to `services/`
-4. Update this README
-
-### Database Changes
-1. Modify models in `models/`
-2. Create migration: `alembic revision --autogenerate`
-3. Review generated migration
-4. Apply: `alembic upgrade head`
-
-## 📄 License
-
-[Your License Here]
+**Future Vision**
+- [ ] Multi-user household support
+- [ ] Product barcode scanning and ingredient lookup
+- [ ] Integration with dermatologist referral services
+- [ ] Android client
 
 ## 👥 Contributors
 
-[Your Team/Contributors]
+- [Mohammed Abdur Rahman](https://github.com/compscibro)
+- John Lizama
+- Aahil Shaik
+- Terina Ishaqzai
 
-## 🤝 Support
+## 📄 License
 
-For issues and questions:
-- GitHub Issues: [Your Repo URL]
-- Email: [Your Support Email]
+DermaLens is open-source and available under the **MIT License**.
+
+See [LICENSE](LICENSE) for full details.
