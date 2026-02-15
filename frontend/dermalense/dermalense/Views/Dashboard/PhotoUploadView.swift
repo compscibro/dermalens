@@ -94,7 +94,9 @@ struct PhotoUploadView: View {
                 imageData: frontImageData,
                 pickerSelection: $frontImage
             )
+            .frame(maxWidth: .infinity)
             .frame(height: 200)
+            .clipped()
             .onChange(of: frontImage) { _, newValue in
                 loadImage(from: newValue) { frontImageData = $0 }
             }
@@ -108,7 +110,9 @@ struct PhotoUploadView: View {
                     imageData: leftImageData,
                     pickerSelection: $leftImage
                 )
+                .frame(maxWidth: .infinity)
                 .frame(height: 160)
+                .clipped()
                 .onChange(of: leftImage) { _, newValue in
                     loadImage(from: newValue) { leftImageData = $0 }
                 }
@@ -120,7 +124,9 @@ struct PhotoUploadView: View {
                     imageData: rightImageData,
                     pickerSelection: $rightImage
                 )
+                .frame(maxWidth: .infinity)
                 .frame(height: 160)
+                .clipped()
                 .onChange(of: rightImage) { _, newValue in
                     loadImage(from: newValue) { rightImageData = $0 }
                 }
@@ -138,56 +144,59 @@ struct PhotoUploadView: View {
         pickerSelection: Binding<PhotosPickerItem?>
     ) -> some View {
         PhotosPicker(selection: pickerSelection, matching: .images) {
-            ZStack {
-                if let imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .clipped()
-                        .overlay(
-                            LinearGradient(
-                                colors: [.black.opacity(0.4), .clear],
-                                startPoint: .bottom,
-                                endPoint: .center
+            GeometryReader { geo in
+                ZStack {
+                    if let imageData, let uiImage = UIImage(data: imageData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .clipped()
+                            .overlay(
+                                LinearGradient(
+                                    colors: [.black.opacity(0.4), .clear],
+                                    startPoint: .bottom,
+                                    endPoint: .center
+                                )
                             )
-                        )
-                        .overlay(alignment: .bottomLeading) {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                Text(title)
-                                    .font(DLFont.caption)
-                                    .fontWeight(.semibold)
+                            .overlay(alignment: .bottomLeading) {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                    Text(title)
+                                        .font(DLFont.caption)
+                                        .fontWeight(.semibold)
+                                }
+                                .foregroundStyle(.white)
+                                .padding(DLSpacing.sm)
                             }
-                            .foregroundStyle(.white)
-                            .padding(DLSpacing.sm)
+                    } else {
+                        VStack(spacing: DLSpacing.sm) {
+                            Image(systemName: systemImage)
+                                .font(.system(size: 28))
+                                .foregroundStyle(DLColor.primaryFallback.opacity(0.6))
+
+                            Text(title)
+                                .font(DLFont.headline)
+                                .foregroundStyle(.primary)
+
+                            Text(subtitle)
+                                .font(DLFont.caption)
+                                .foregroundStyle(.secondary)
                         }
-                } else {
-                    VStack(spacing: DLSpacing.sm) {
-                        Image(systemName: systemImage)
-                            .font(.system(size: 28))
-                            .foregroundStyle(DLColor.primaryFallback.opacity(0.6))
-
-                        Text(title)
-                            .font(DLFont.headline)
-                            .foregroundStyle(.primary)
-
-                        Text(subtitle)
-                            .font(DLFont.caption)
-                            .foregroundStyle(.secondary)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .background(Color(.systemGray6))
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.systemGray6))
                 }
+                .clipShape(RoundedRectangle(cornerRadius: DLRadius.lg))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DLRadius.lg)
+                        .strokeBorder(
+                            imageData != nil ? Color.green.opacity(0.5) : DLColor.primaryFallback.opacity(0.2),
+                            style: imageData != nil ? StrokeStyle(lineWidth: 2) : StrokeStyle(lineWidth: 2, dash: [8, 4])
+                        )
+                )
             }
-            .clipShape(RoundedRectangle(cornerRadius: DLRadius.lg))
-            .overlay(
-                RoundedRectangle(cornerRadius: DLRadius.lg)
-                    .strokeBorder(
-                        imageData != nil ? Color.green.opacity(0.5) : DLColor.primaryFallback.opacity(0.2),
-                        style: imageData != nil ? StrokeStyle(lineWidth: 2) : StrokeStyle(lineWidth: 2, dash: [8, 4])
-                    )
-            )
         }
         .buttonStyle(.plain)
         .disabled(isSubmitting)
