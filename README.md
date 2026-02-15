@@ -1,10 +1,10 @@
 # 🧴 DermaLens
 
-AI-powered skincare analysis that turns a few selfies into personalized routines. Snap three photos, answer a quick skin quiz, and receive metric-level analysis with a morning, evening, and weekly plan — all in under a minute.
+AI-powered skincare analysis that turns a few selfies into personalized routines. Snap three photos, answer a quick skin quiz, and receive metric-level analysis with a morning, evening, and weekly plan all in under a minute.
 
 ## 🎯 Why We Built This
 
-Skincare is personal, but most advice is generic. Dermatologist visits are expensive and hard to schedule, while online quizzes give one-size-fits-all recommendations that ignore what your skin actually looks like. DermaLens bridges that gap — it uses AI to objectively analyze your skin from photos, then generates a routine grounded in real dermatological rules (not marketing). The goal is to make evidence-based skincare guidance accessible to anyone with a phone.
+Skincare is personal, but most advice is generic. Dermatologist visits are expensive and hard to schedule, while online quizzes give one-size-fits-all recommendations that ignore what your skin actually looks like. DermaLens bridges that gap as it uses AI to objectively analyze your skin from photos, then generates a routine grounded in real dermatological rules (not marketing). The goal is to make evidence-based skincare guidance accessible to anyone with a phone.
 
 ## ✨ Features
 
@@ -24,7 +24,7 @@ Skincare is personal, but most advice is generic. Dermatologist visits are expen
 - [x] **Context-Aware Guidance:** The AI knows your latest scan, routine, and concerns
 - [x] **Quick Action Chips:** One-tap prompts for common questions
 - [x] **Session History:** Conversations persist and can be resumed
-- [x] **Responsible Boundaries:** Recommends a dermatologist for serious concerns — never diagnoses
+- [x] **Responsible Boundaries:** Recommends a dermatologist for serious concerns, never diagnoses
 
 ### Account & Progress Tracking
 - [x] **Scan History:** Every analysis saved and accessible from your profile
@@ -38,7 +38,7 @@ Skincare is personal, but most advice is generic. Dermatologist visits are expen
 
 ## 🧩 Architecture
 
-DermaLens is a full-stack application with a native iOS client and a stateless Python API. All persistence lives in AWS S3 — no database required.
+DermaLens is a full-stack application with a native iOS client and a stateless Python API. All persistence lives in AWS S3 and no database required.
 
 ```
 ┌─────────────────────────────┐
