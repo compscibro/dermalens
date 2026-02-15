@@ -2,6 +2,10 @@
 
 AI-powered skincare analysis that turns a few selfies into personalized routines. Snap three photos, answer a quick skin quiz, and receive metric-level analysis with a morning, evening, and weekly plan — all in under a minute.
 
+## 🎯 Why We Built This
+
+Skincare is personal, but most advice is generic. Dermatologist visits are expensive and hard to schedule, while online quizzes give one-size-fits-all recommendations that ignore what your skin actually looks like. DermaLens bridges that gap — it uses AI to objectively analyze your skin from photos, then generates a routine grounded in real dermatological rules (not marketing). The goal is to make evidence-based skincare guidance accessible to anyone with a phone.
+
 ## ✨ Features
 
 ### Intelligent Skin Analysis
@@ -84,11 +88,13 @@ DermaLens is a full-stack application with a native iOS client and a stateless P
 
 ## 💻 Tech Stack
 
-**iOS:** Swift, SwiftUI, Observation, PhotosUI, URLSession
-
-**Backend:** Python, FastAPI, Pydantic, boto3, google-genai, Pillow
-
-**Infrastructure:** AWS S3, AWS EC2 (t3.micro), Gemini 2.5 Flash
+| Layer | Technologies | Why |
+|-------|-------------|-----|
+| **iOS** | Swift, SwiftUI, Observation, PhotosUI | SwiftUI with the Observation framework enables a reactive, modern UI with minimal boilerplate. PhotosUI provides the native image picker without third-party dependencies. |
+| **Backend** | Python, FastAPI, Pydantic, Pillow | FastAPI was chosen for its async performance and automatic OpenAPI documentation. Pydantic enforces strict request/response validation. Pillow handles server-side image processing. |
+| **AI** | Gemini 2.5 Flash (google-genai) | Gemini's multimodal vision capabilities allow structured skin metric extraction directly from photos. The same model powers the chat, keeping the AI stack unified. |
+| **Storage** | AWS S3 (boto3) | S3 as the sole persistence layer eliminates database overhead entirely — user profiles, scan results, routines, and chat history are all stored as JSON files alongside images. |
+| **Hosting** | AWS EC2 (t3.micro) | Lightweight and cost-effective for an MVP. The stateless API design means the server can be replaced or scaled without migration. |
 
 ## 📦 Installation
 
@@ -176,9 +182,9 @@ All endpoints are prefixed with `/api/v1`.
 ## 👥 Contributors
 
 - [Mohammed Abdur Rahman](https://www.linkedin.com/in/compscibro/)
-- [John Lizama](https://github.com/john3lizama)
-- [Aahil Shaik](https://github.com/bizaahil)
-- [Terina Ishaqzai](https://github.com/Terinaishaqzai)
+- [John Lizama](https://www.linkedin.com/in/john-lizama-21235a282/)
+- [Aahil Shaik](https://www.linkedin.com/in/aahil-shaik-04532a2b5/)
+- [Terina Ishaqzai](https://www.linkedin.com/in/terina-ishaqzai-39bb28239/)
 
 ## 📄 License
 
