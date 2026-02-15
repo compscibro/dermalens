@@ -13,8 +13,13 @@ struct DermaLensApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
-                .environment(appState)
+            if appState.isOnboarded {
+                MainTabView()
+                    .environment(appState)
+            } else {
+                OnboardingView()
+                    .environment(appState)
+            }
         }
     }
 }

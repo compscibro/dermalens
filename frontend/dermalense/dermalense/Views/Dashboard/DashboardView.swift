@@ -9,11 +9,11 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
-    @State private var currentStep: DashboardStep = .upload
+    @State private var currentStep: DashboardStep = .concerns
 
     enum DashboardStep: Int, CaseIterable {
-        case upload = 0
-        case concerns = 1
+        case concerns = 0
+        case upload = 1
         case analysis = 2
         case routine = 3
         case chat = 4
@@ -47,11 +47,11 @@ struct DashboardView: View {
                     .padding(.top, DLSpacing.sm)
 
                 TabView(selection: $currentStep) {
-                    PhotoUploadView(onNext: { advanceStep() })
-                        .tag(DashboardStep.upload)
-
                     ConcernsFormView(onNext: { advanceStep() })
                         .tag(DashboardStep.concerns)
+
+                    PhotoUploadView(onNext: { advanceStep() })
+                        .tag(DashboardStep.upload)
 
                     SkinAnalysisView(onNext: { advanceStep() })
                         .tag(DashboardStep.analysis)
@@ -70,7 +70,7 @@ struct DashboardView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        currentStep = .upload
+                        currentStep = .concerns
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
                             .font(.system(size: 14, weight: .semibold))

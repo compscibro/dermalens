@@ -12,6 +12,7 @@ import Observation
 
 @Observable
 class AppState {
+    var isOnboarded: Bool = false
     var user: UserProfile = .placeholder
     var scanHistory: [ScanRecord] = ScanRecord.sampleHistory
     var currentScan: SkinScan?
