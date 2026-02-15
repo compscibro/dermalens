@@ -95,6 +95,7 @@ DermaLens is a full-stack application with a native iOS client and a stateless P
 | **AI** | Gemini 2.5 Flash (google-genai) | Gemini's multimodal vision capabilities allow structured skin metric extraction directly from photos. The same model powers the chat, keeping the AI stack unified. |
 | **Storage** | AWS S3 (boto3) | S3 as the sole persistence layer eliminates database overhead entirely — user profiles, scan results, routines, and chat history are all stored as JSON files alongside images. |
 | **Hosting** | AWS EC2 (t3.micro) | Lightweight and cost-effective for an MVP. The stateless API design means the server can be replaced or scaled without migration. |
+| **Tooling** | Claude Code | Used as an AI pair-programming assistant throughout development for rapid prototyping, debugging, and code generation across the full stack. |
 
 ## 📦 Installation
 
