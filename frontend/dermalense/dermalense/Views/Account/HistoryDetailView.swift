@@ -8,7 +8,11 @@
 import SwiftUI
 
 struct HistoryDetailView: View {
+    @Environment(AppState.self) private var appState
     let record: ScanRecord
+
+    @State private var fullScan: SkinScan?
+    @State private var isLoading = false
 
     var body: some View {
         ScrollView {
@@ -16,19 +20,55 @@ struct HistoryDetailView: View {
                 // Score header
                 scoreHeader
 
-                // Photos section
-                photosSection
+                // Metrics grid (if loaded)
+                if let fullScan {
+                    metricsSection(fullScan)
+                    summarySection(fullScan)
+                } else if isLoading {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: DLSpacing.sm) {
+                            ProgressView()
+                            Text("Loading details...")
+                                .font(DLFont.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(DLSpacing.xl)
+                }
 
                 // Concerns
                 concernsSection
 
-                // Form data placeholder
+                // Form data
                 formDataSection
             }
             .padding(DLSpacing.md)
         }
         .navigationTitle("Scan Details")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await loadFullScan()
+        }
+    }
+
+    // MARK: - Data Loading
+
+    private func loadFullScan() async {
+        guard !appState.userEmail.isEmpty else { return }
+        isLoading = true
+        do {
+            let scan = try await APIService.shared.getScan(
+                email: appState.userEmail,
+                scanId: record.id.uuidString.lowercased()
+            )
+            fullScan = scan
+            isLoading = false
+        } catch {
+            isLoading = false
+            // Silently fail — we still show the record data
+        }
     }
 
     // MARK: - Score Header
@@ -68,37 +108,82 @@ struct HistoryDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: DLRadius.xl))
     }
 
-    // MARK: - Photos
+    // MARK: - Metrics
 
-    private var photosSection: some View {
+    private func metricsSection(_ scan: SkinScan) -> some View {
         VStack(alignment: .leading, spacing: DLSpacing.sm) {
-            Text("Photos")
+            Text("Detailed Breakdown")
                 .font(DLFont.headline)
 
-            HStack(spacing: DLSpacing.sm) {
-                photoPlaceholder("Front")
-                photoPlaceholder("Left")
-                photoPlaceholder("Right")
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DLSpacing.sm) {
+                ForEach(scan.scores) { metric in
+                    metricCard(metric)
+                }
             }
         }
     }
 
-    private func photoPlaceholder(_ label: String) -> some View {
-        VStack(spacing: DLSpacing.xs) {
-            RoundedRectangle(cornerRadius: DLRadius.md)
-                .fill(Color(.systemGray6))
-                .frame(height: 120)
-                .overlay(
-                    VStack(spacing: 4) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 24))
-                            .foregroundStyle(.tertiary)
-                        Text(label)
-                            .font(DLFont.small)
-                            .foregroundStyle(.tertiary)
-                    }
-                )
+    private func metricCard(_ metric: SkinMetric) -> some View {
+        VStack(alignment: .leading, spacing: DLSpacing.xs) {
+            HStack {
+                Image(systemName: metric.icon)
+                    .font(.system(size: 12))
+                    .foregroundStyle(metricColor(metric.color))
+                Text(metric.name)
+                    .font(DLFont.caption)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(String(format: "%.1f", metric.score))
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                Text("%")
+                    .font(DLFont.small)
+                    .foregroundStyle(.secondary)
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(.systemGray5))
+                        .frame(height: 5)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(metricColor(metric.color))
+                        .frame(width: geo.size.width * metric.score / 100.0, height: 5)
+                }
+            }
+            .frame(height: 5)
+
+            Text(metric.colorDescription)
+                .font(DLFont.small)
+                .foregroundStyle(metricColor(metric.color))
         }
+        .padding(DLSpacing.sm)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: DLRadius.md))
+    }
+
+    // MARK: - Summary
+
+    private func summarySection(_ scan: SkinScan) -> some View {
+        VStack(alignment: .leading, spacing: DLSpacing.sm) {
+            HStack {
+                Image(systemName: "doc.text.fill")
+                    .foregroundStyle(DLColor.primaryFallback)
+                Text("AI Summary")
+                    .font(DLFont.headline)
+            }
+
+            Text(scan.summary)
+                .font(DLFont.body)
+                .foregroundStyle(.secondary)
+                .lineSpacing(4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(DLSpacing.md)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: DLRadius.lg))
     }
 
     // MARK: - Concerns
@@ -133,13 +218,13 @@ struct HistoryDetailView: View {
 
     private var formDataSection: some View {
         VStack(alignment: .leading, spacing: DLSpacing.sm) {
-            Text("Form Responses")
+            Text("Scan Info")
                 .font(DLFont.headline)
 
             VStack(spacing: 0) {
-                formRow(label: "Skin Type", value: "Combination")
+                formRow(label: "Date", value: record.date.formatted(date: .long, time: .shortened))
                 Divider()
-                formRow(label: "Sensitivity", value: "Moderate")
+                formRow(label: "Overall Score", value: String(format: "%.1f", record.overallScore))
                 Divider()
                 formRow(label: "Primary Concern", value: record.concerns.first ?? "N/A")
             }
@@ -167,6 +252,16 @@ struct HistoryDetailView: View {
 
     // MARK: - Helpers
 
+    private func metricColor(_ colorString: String) -> Color {
+        switch colorString.lowercased() {
+        case "green": return .green
+        case "yellow": return .yellow
+        case "orange": return .orange
+        case "red": return .red
+        default: return .gray
+        }
+    }
+
     private var scoreColor: Color {
         if record.overallScore >= 80 { return .green }
         else if record.overallScore >= 65 { return .mint }
@@ -188,5 +283,6 @@ struct HistoryDetailView: View {
 #Preview {
     NavigationStack {
         HistoryDetailView(record: ScanRecord.sampleHistory[0])
+            .environment(AppState())
     }
 }

@@ -11,25 +11,45 @@ struct FullHistoryView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: DLSpacing.md) {
-                // Score trend chart placeholder
-                scoreTrendCard
+        Group {
+            if appState.scanHistory.isEmpty && !appState.isLoadingHistory {
+                ContentUnavailableView(
+                    "No Scans Yet",
+                    systemImage: "clock.arrow.circlepath",
+                    description: Text("Complete your first skin scan to see your history here.")
+                )
+            } else {
+                ScrollView {
+                    VStack(spacing: DLSpacing.md) {
+                        // Score trend chart
+                        if appState.scanHistory.count >= 2 {
+                            scoreTrendCard
+                        }
 
-                // All records
-                ForEach(appState.scanHistory) { record in
-                    NavigationLink {
-                        HistoryDetailView(record: record)
-                    } label: {
-                        historyCard(record)
+                        // All records
+                        ForEach(appState.scanHistory) { record in
+                            NavigationLink {
+                                HistoryDetailView(record: record)
+                            } label: {
+                                historyCard(record)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding(DLSpacing.md)
                 }
             }
-            .padding(DLSpacing.md)
         }
         .navigationTitle("Scan History")
         .navigationBarTitleDisplayMode(.large)
+        .refreshable {
+            guard !appState.userEmail.isEmpty else { return }
+            if let history = try? await APIService.shared.getScanHistory(
+                email: appState.userEmail
+            ) {
+                appState.scanHistory = history
+            }
+        }
     }
 
     // MARK: - Score Trend

@@ -8,10 +8,9 @@
 import SwiftUI
 
 struct ConcernsFormView: View {
-    var onNext: () -> Void
+    var onSubmit: (SkinConcernsForm) -> Void
 
     @State private var form = SkinConcernsForm()
-    @State private var isSubmitting = false
 
     private var isFormValid: Bool {
         !form.primaryConcerns.isEmpty && !form.biggestInsecurity.isEmpty
@@ -122,7 +121,7 @@ struct ConcernsFormView: View {
             sectionLabel("Skin Type", subtitle: nil)
 
             HStack(spacing: DLSpacing.sm) {
-                ForEach(SkinConcernsForm.SkinType.allCases) { type in
+                ForEach(SkinConcernsForm.skinTypes, id: \.self) { type in
                     skinTypeButton(type)
                 }
             }
@@ -132,12 +131,12 @@ struct ConcernsFormView: View {
         .clipShape(RoundedRectangle(cornerRadius: DLRadius.lg))
     }
 
-    private func skinTypeButton(_ type: SkinConcernsForm.SkinType) -> some View {
+    private func skinTypeButton(_ type: String) -> some View {
         let isSelected = form.skinType == type
         return Button {
             withAnimation(.spring(response: 0.25)) { form.skinType = type }
         } label: {
-            Text(type.rawValue)
+            Text(type)
                 .font(.system(size: 12, weight: isSelected ? .semibold : .regular, design: .rounded))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -157,8 +156,8 @@ struct ConcernsFormView: View {
             sectionLabel("Sensitivity Level", subtitle: nil)
 
             Picker("Sensitivity", selection: $form.sensitivityLevel) {
-                ForEach(SkinConcernsForm.SensitivityLevel.allCases) { level in
-                    Text(level.rawValue).tag(level)
+                ForEach(SkinConcernsForm.sensitivityLevels, id: \.self) { level in
+                    Text(level).tag(level)
                 }
             }
             .pickerStyle(.segmented)
@@ -190,20 +189,11 @@ struct ConcernsFormView: View {
 
     private var submitButton: some View {
         Button {
-            isSubmitting = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                isSubmitting = false
-                onNext()
-            }
+            onSubmit(form)
         } label: {
             HStack(spacing: DLSpacing.sm) {
-                if isSubmitting {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Image(systemName: "sparkles")
-                }
-                Text(isSubmitting ? "Analyzing..." : "Analyze My Skin")
+                Image(systemName: "camera.fill")
+                Text("Continue to Photos")
                     .fontWeight(.semibold)
             }
             .frame(maxWidth: .infinity)
@@ -214,7 +204,7 @@ struct ConcernsFormView: View {
             )
             .foregroundStyle(.white)
         }
-        .disabled(!isFormValid || isSubmitting)
+        .disabled(!isFormValid)
         .padding(.bottom, DLSpacing.xl)
     }
 
@@ -273,5 +263,5 @@ struct FlowLayout: Layout {
 }
 
 #Preview {
-    ConcernsFormView(onNext: {})
+    ConcernsFormView(onSubmit: { _ in })
 }

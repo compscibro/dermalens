@@ -1,6 +1,5 @@
 """
-Scans router — upload photos, run Gemini Vision analysis, generate routine.
-All data stored in S3.
+Scans router — upload photos, run AI pipeline (Gemini Vision + local engine), store in S3.
 """
 from fastapi import APIRouter, Query, HTTPException, UploadFile, File, Form
 from typing import List
@@ -11,7 +10,7 @@ import json
 from backend.schemas.scan import SkinScanSchema, ScanRecordSchema
 from backend.schemas.routine import RoutinePlanSchema
 from backend.services.storage.s3_service import s3_service
-from backend.services.vision.gemini_vision_service import gemini_vision_service
+from backend.services.ai_pipeline import run_ai
 
 router = APIRouter(prefix="/scans", tags=["Scans"])
 
@@ -59,13 +58,54 @@ async def upload_and_analyze(
     # Save concerns
     s3_service.put_json(s3_service.concerns_key(email, scan_id), concerns_data)
 
-    # Run Gemini Vision analysis
-    analysis = gemini_vision_service.analyze_skin(
-        front_image=front_bytes,
-        left_image=left_bytes,
-        right_image=right_bytes,
-        concerns=concerns_data,
+    # Build quiz dict from concerns for the AI pipeline
+    quiz = {
+        "sensitivity": concerns_data.get("sensitivityLevel", "Low") == "High",
+        "tight_after_wash": "yes" if concerns_data.get("skinType") == "Dry" else "no",
+        "breakout_frequency": "often" if "Acne" in concerns_data.get("primaryConcerns", []) else "sometimes",
+    }
+
+    # Determine priority from user's biggest insecurity
+    priority = concerns_data.get("biggestInsecurity", "").lower().strip()
+    # Map common insecurity strings to engine priority keys
+    priority_map = {
+        "acne": "acne",
+        "redness": "redness",
+        "texture": "texture",
+        "dryness": "dryness",
+        "dry skin": "dryness",
+        "oily skin": "acne",
+        "oiliness": "acne",
+        "pores": "texture",
+        "dark spots": "texture",
+        "wrinkles": "texture",
+        "sensitivity": "barrier",
+        "barrier": "barrier",
+    }
+    priority = priority_map.get(priority, priority if priority else "acne")
+
+    # Run the full AI pipeline
+    result = run_ai(
+        front_bytes=front_bytes,
+        left_bytes=left_bytes,
+        right_bytes=right_bytes,
+        quiz=quiz,
+        priority=priority,
     )
+
+    # Check for retake
+    if result.get("retake_required"):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Image quality insufficient. Please retake your photos.",
+                "retake_required": True,
+                "metrics": result.get("metrics", {}),
+            },
+        )
+
+    # Extract the legacy-format analysis
+    analysis = result["analysis"]
 
     # Build full scan record
     scan_data = {
@@ -82,8 +122,8 @@ async def upload_and_analyze(
     # Save analysis to S3
     s3_service.put_json(s3_service.analysis_key(email, scan_id), scan_data)
 
-    # Generate routine using Gemini
-    routine_raw = gemini_vision_service.generate_routine(analysis, concerns_data)
+    # Get the routine from the pipeline result (already in legacy format)
+    routine_raw = result.get("routine", {"morningSteps": [], "eveningSteps": [], "weeklySteps": []})
     routine_data = {
         "id": str(uuid.uuid4()),
         "date": now,
@@ -94,6 +134,17 @@ async def upload_and_analyze(
 
     # Save routine to S3
     s3_service.put_json(s3_service.routine_key(email, scan_id), routine_data)
+
+    # Also save raw metrics and plan for future trend tracking
+    s3_service.put_json(
+        f"users/{email}/scans/{scan_id}/raw_metrics.json",
+        result.get("metrics", {}),
+    )
+    if result.get("plan"):
+        s3_service.put_json(
+            f"users/{email}/scans/{scan_id}/plan.json",
+            result["plan"],
+        )
 
     return SkinScanSchema(**scan_data)
 

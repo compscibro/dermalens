@@ -8,9 +8,9 @@
 import SwiftUI
 
 struct RoutinePlanView: View {
+    var plan: RoutinePlan?
     var onNext: () -> Void
 
-    @State private var plan: RoutinePlan = .sample
     @State private var selectedSection: RoutineSection = .morning
 
     enum RoutineSection: String, CaseIterable, Identifiable {
@@ -37,13 +37,54 @@ struct RoutinePlanView: View {
         }
     }
 
+    /// Only show sections that have steps
+    private var availableSections: [RoutineSection] {
+        guard let plan else { return RoutineSection.allCases }
+        return RoutineSection.allCases.filter { section in
+            switch section {
+            case .morning: return !plan.morningSteps.isEmpty
+            case .evening: return !plan.eveningSteps.isEmpty
+            case .weekly: return !plan.weeklySteps.isEmpty
+            }
+        }
+    }
+
     var body: some View {
+        Group {
+            if let plan {
+                planContent(plan)
+            } else {
+                VStack(spacing: DLSpacing.md) {
+                    ProgressView()
+                        .controlSize(.large)
+                    Text("Generating your routine...")
+                        .font(DLFont.body)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onChange(of: plan != nil) { _, hasPlan in
+            if hasPlan, let plan {
+                // Auto-select first available section
+                if !plan.morningSteps.isEmpty {
+                    selectedSection = .morning
+                } else if !plan.eveningSteps.isEmpty {
+                    selectedSection = .evening
+                } else if !plan.weeklySteps.isEmpty {
+                    selectedSection = .weekly
+                }
+            }
+        }
+    }
+
+    private func planContent(_ plan: RoutinePlan) -> some View {
         ScrollView {
             VStack(spacing: DLSpacing.lg) {
                 headerSection
                 aiDisclaimer
                 sectionPicker
-                routineSteps
+                routineSteps(plan)
                 chatButton
             }
             .padding(DLSpacing.md)
@@ -87,7 +128,7 @@ struct RoutinePlanView: View {
 
     private var sectionPicker: some View {
         HStack(spacing: DLSpacing.sm) {
-            ForEach(RoutineSection.allCases) { section in
+            ForEach(availableSections) { section in
                 sectionTab(section)
             }
         }
@@ -122,7 +163,7 @@ struct RoutinePlanView: View {
 
     // MARK: - Steps
 
-    private var routineSteps: some View {
+    private func routineSteps(_ plan: RoutinePlan) -> some View {
         let steps: [RoutineStep] = {
             switch selectedSection {
             case .morning: return plan.morningSteps
@@ -231,5 +272,5 @@ struct RoutinePlanView: View {
 }
 
 #Preview {
-    RoutinePlanView(onNext: {})
+    RoutinePlanView(plan: .sample, onNext: {})
 }

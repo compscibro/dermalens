@@ -11,10 +11,16 @@ struct OnboardingView: View {
     @Environment(AppState.self) private var appState
 
     @State private var username = ""
-    @FocusState private var isUsernameFocused: Bool
+    @State private var email = ""
+    @State private var isCreating = false
+    @State private var errorMessage: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case username, email }
 
     private var isFormValid: Bool {
         !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && email.contains("@") && email.contains(".")
     }
 
     var body: some View {
@@ -26,7 +32,16 @@ struct OnboardingView: View {
                 brandingHeader
 
                 // MARK: - Form
-                formField
+                formFields
+
+                // MARK: - Error
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(DLFont.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .transition(.opacity)
+                }
 
                 // MARK: - Get Started
                 getStartedButton
@@ -69,10 +84,11 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Form Field
+    // MARK: - Form Fields
 
-    private var formField: some View {
+    private var formFields: some View {
         VStack(spacing: DLSpacing.md) {
+            // Username
             VStack(alignment: .leading, spacing: DLSpacing.xs) {
                 Text("Username")
                     .font(DLFont.caption)
@@ -90,10 +106,38 @@ struct OnboardingView: View {
                         .font(DLFont.body)
                         .textContentType(.username)
                         .autocapitalization(.none)
-                        .focused($isUsernameFocused)
+                        .focused($focusedField, equals: .username)
+                        .submitLabel(.next)
+                        .onSubmit { focusedField = .email }
+                }
+                .padding(DLSpacing.md)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: DLRadius.md))
+            }
+
+            // Email
+            VStack(alignment: .leading, spacing: DLSpacing.xs) {
+                Text("Email")
+                    .font(DLFont.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                HStack(spacing: DLSpacing.sm) {
+                    Image(systemName: "envelope")
+                        .font(.system(size: 14))
+                        .foregroundStyle(DLColor.primaryFallback)
+                        .frame(width: 20)
+
+                    TextField("your@email.com", text: $email)
+                        .font(DLFont.body)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .focused($focusedField, equals: .email)
                         .submitLabel(.done)
                         .onSubmit {
-                            isUsernameFocused = false
+                            focusedField = nil
                             if isFormValid { createAccount() }
                         }
                 }
@@ -111,19 +155,24 @@ struct OnboardingView: View {
             createAccount()
         } label: {
             HStack(spacing: DLSpacing.sm) {
-                Text("Get Started")
-                    .fontWeight(.semibold)
-                Image(systemName: "arrow.right")
+                if isCreating {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Text("Get Started")
+                        .fontWeight(.semibold)
+                    Image(systemName: "arrow.right")
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(
                 RoundedRectangle(cornerRadius: DLRadius.md)
-                    .fill(isFormValid ? DLColor.primaryFallback : Color(.systemGray4))
+                    .fill(isFormValid && !isCreating ? DLColor.primaryFallback : Color(.systemGray4))
             )
             .foregroundStyle(.white)
         }
-        .disabled(!isFormValid)
+        .disabled(!isFormValid || isCreating)
         .animation(.easeInOut(duration: 0.2), value: isFormValid)
     }
 
@@ -131,17 +180,39 @@ struct OnboardingView: View {
 
     private func createAccount() {
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        appState.user = UserProfile(
-            id: UUID(),
-            name: "",
-            email: "",
-            username: trimmedUsername,
-            avatarSystemName: "person.crop.circle.fill"
-        )
+        isCreating = true
+        errorMessage = nil
 
-        withAnimation(.easeInOut(duration: 0.4)) {
-            appState.isOnboarded = true
+        Task {
+            do {
+                // Auto-creates profile on backend if it doesn't exist
+                var profile = try await APIService.shared.getProfile(email: trimmedEmail)
+
+                // Update with user-provided username if different
+                if profile.username != trimmedUsername {
+                    profile = try await APIService.shared.updateProfile(
+                        email: trimmedEmail,
+                        name: nil,
+                        username: trimmedUsername,
+                        avatarSystemName: nil
+                    )
+                }
+
+                appState.user = profile
+                appState.userEmail = trimmedEmail
+                appState.savedIsOnboarded = true
+
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    appState.isOnboarded = true
+                }
+            } catch {
+                withAnimation {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            isCreating = false
         }
     }
 }

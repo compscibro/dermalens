@@ -12,8 +12,9 @@ struct EditProfileView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String = ""
-    @State private var email: String = ""
     @State private var username: String = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -59,10 +60,8 @@ struct EditProfileView: View {
                         Image(systemName: "envelope.fill")
                             .foregroundStyle(DLColor.primaryFallback)
                             .frame(width: 24)
-                        TextField("Email", text: $email)
-                            .keyboardType(.emailAddress)
-                            .textContentType(.emailAddress)
-                            .autocapitalization(.none)
+                        Text(appState.user.email.isEmpty ? appState.userEmail : appState.user.email)
+                            .foregroundStyle(.secondary)
                     }
 
                     HStack {
@@ -74,16 +73,32 @@ struct EditProfileView: View {
                     }
                 }
 
-                Section {
-                    Button("Save Changes") {
-                        appState.user.name = name
-                        appState.user.email = email
-                        appState.user.username = username
-                        dismiss()
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(DLFont.caption)
+                            .foregroundStyle(.red)
                     }
-                    .frame(maxWidth: .infinity)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(DLColor.primaryFallback)
+                }
+
+                Section {
+                    Button {
+                        Task { await saveProfile() }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isSaving {
+                                ProgressView()
+                                    .tint(DLColor.primaryFallback)
+                            } else {
+                                Text("Save Changes")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(DLColor.primaryFallback)
+                            }
+                            Spacer()
+                        }
+                    }
+                    .disabled(isSaving || name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .navigationTitle("Edit Profile")
@@ -96,9 +111,28 @@ struct EditProfileView: View {
             }
             .onAppear {
                 name = appState.user.name
-                email = appState.user.email
                 username = appState.user.username
             }
+        }
+    }
+
+    private func saveProfile() async {
+        isSaving = true
+        errorMessage = nil
+
+        do {
+            let updated = try await APIService.shared.updateProfile(
+                email: appState.userEmail,
+                name: name.trimmingCharacters(in: .whitespaces),
+                username: username.trimmingCharacters(in: .whitespaces),
+                avatarSystemName: nil
+            )
+            appState.user = updated
+            isSaving = false
+            dismiss()
+        } catch {
+            isSaving = false
+            errorMessage = "Failed to save: \(error.localizedDescription)"
         }
     }
 }

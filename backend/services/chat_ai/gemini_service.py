@@ -1,12 +1,12 @@
 """
 Gemini AI Chat Service
 Handles conversational AI for skincare guidance — simplified for S3-only backend.
+Updated to use the new google.genai SDK.
 """
-import json
-import google.generativeai as genai
 import logging
 from typing import List, Dict, Optional
 
+from google.genai import Client, types
 from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -34,8 +34,8 @@ class GeminiChatService:
     """Service for Gemini AI chat interactions."""
 
     def __init__(self):
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
+        self.client = Client(api_key=settings.GEMINI_API_KEY)
+        self.model_id = settings.GEMINI_MODEL
 
     def generate_response(
         self,
@@ -58,12 +58,38 @@ class GeminiChatService:
         try:
             contextualized_prompt = self._build_prompt(user_message, context)
 
-            # Use last 10 messages for context window
+            # Build contents from conversation history (last 10 messages)
             history = conversation_history[-10:]
+            contents = []
+            for msg in history:
+                role = msg.get("role", "user")
+                parts_data = msg.get("parts", [])
+                text_parts = []
+                for p in parts_data:
+                    if isinstance(p, str):
+                        text_parts.append(types.Part(text=p))
+                    elif isinstance(p, dict) and "text" in p:
+                        text_parts.append(types.Part(text=p["text"]))
+                if text_parts:
+                    contents.append(types.Content(role=role, parts=text_parts))
 
-            chat = self.model.start_chat(history=history)
-            response = chat.send_message(contextualized_prompt)
-            return response.text
+            # Add the current user message
+            contents.append(
+                types.Content(
+                    role="user",
+                    parts=[types.Part(text=contextualized_prompt)],
+                )
+            )
+
+            resp = self.client.models.generate_content(
+                model=self.model_id,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0.7,
+                ),
+            )
+            return resp.text
 
         except Exception as e:
             logger.error(f"Gemini API error: {e}")
@@ -74,7 +100,7 @@ class GeminiChatService:
 
     def _build_prompt(self, user_message: str, context: Optional[Dict]) -> str:
         """Build context-aware prompt."""
-        parts = [SYSTEM_PROMPT, ""]
+        parts = []
 
         if context:
             parts.append("Current Context:")

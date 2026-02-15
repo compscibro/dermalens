@@ -8,17 +8,31 @@
 import SwiftUI
 
 struct SkinAnalysisView: View {
+    var scan: SkinScan?
     var onNext: () -> Void
 
-    @State private var scan: SkinScan = .sample
     @State private var animateScores = false
 
     var body: some View {
+        Group {
+            if let scan {
+                scanContent(scan)
+            } else {
+                ContentUnavailableView(
+                    "No Scan Yet",
+                    systemImage: "waveform.path.ecg",
+                    description: Text("Upload your photos to see your skin analysis results.")
+                )
+            }
+        }
+    }
+
+    private func scanContent(_ scan: SkinScan) -> some View {
         ScrollView {
             VStack(spacing: DLSpacing.lg) {
-                overallScoreCard
-                metricsGrid
-                summaryCard
+                overallScoreCard(scan)
+                metricsGrid(scan)
+                summaryCard(scan)
                 aiDisclaimer
                 nextButton
             }
@@ -33,7 +47,7 @@ struct SkinAnalysisView: View {
 
     // MARK: - Overall Score
 
-    private var overallScoreCard: some View {
+    private func overallScoreCard(_ scan: SkinScan) -> some View {
         VStack(spacing: DLSpacing.md) {
             Text("Your Skin Score")
                 .font(DLFont.headline)
@@ -82,7 +96,7 @@ struct SkinAnalysisView: View {
 
     // MARK: - Metrics Grid
 
-    private var metricsGrid: some View {
+    private func metricsGrid(_ scan: SkinScan) -> some View {
         VStack(alignment: .leading, spacing: DLSpacing.sm) {
             Text("Detailed Breakdown")
                 .font(DLFont.headline)
@@ -133,7 +147,7 @@ struct SkinAnalysisView: View {
             }
             .frame(height: 6)
 
-            Text(metric.color.description)
+            Text(metric.colorDescription)
                 .font(DLFont.small)
                 .foregroundStyle(metricColor(metric.color))
         }
@@ -144,7 +158,7 @@ struct SkinAnalysisView: View {
 
     // MARK: - Summary
 
-    private var summaryCard: some View {
+    private func summaryCard(_ scan: SkinScan) -> some View {
         VStack(alignment: .leading, spacing: DLSpacing.sm) {
             HStack {
                 Image(systemName: "doc.text.fill")
@@ -226,16 +240,17 @@ struct SkinAnalysisView: View {
         else { return .red }
     }
 
-    private func metricColor(_ color: SkinMetric.MetricColor) -> Color {
-        switch color {
-        case .green: return .green
-        case .yellow: return .yellow
-        case .orange: return .orange
-        case .red: return .red
+    private func metricColor(_ colorString: String) -> Color {
+        switch colorString.lowercased() {
+        case "green": return .green
+        case "yellow": return .yellow
+        case "orange": return .orange
+        case "red": return .red
+        default: return .gray
         }
     }
 }
 
 #Preview {
-    SkinAnalysisView(onNext: {})
+    SkinAnalysisView(scan: .sample, onNext: {})
 }

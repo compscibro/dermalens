@@ -9,7 +9,9 @@ import SwiftUI
 import PhotosUI
 
 struct PhotoUploadView: View {
-    var onNext: () -> Void
+    @Environment(AppState.self) private var appState
+    var concernsForm: SkinConcernsForm?
+    var onSubmit: (SkinScan) -> Void
 
     @State private var frontImage: PhotosPickerItem?
     @State private var leftImage: PhotosPickerItem?
@@ -18,6 +20,11 @@ struct PhotoUploadView: View {
     @State private var leftImageData: Data?
     @State private var rightImageData: Data?
     @State private var isSubmitting = false
+    @State private var uploadPhase: String = ""
+    @State private var errorMessage: String?
+    @State private var showRetakeAlert = false
+    @State private var retakeMessage: String = ""
+    @State private var retakeReasons: [String] = []
 
     private var allPhotosSelected: Bool {
         frontImageData != nil && leftImageData != nil && rightImageData != nil
@@ -28,10 +35,30 @@ struct PhotoUploadView: View {
             VStack(spacing: DLSpacing.lg) {
                 headerSection
                 photoGrid
+
+                if let errorMessage {
+                    errorBanner(errorMessage)
+                }
+
                 submitButton
             }
             .padding(DLSpacing.md)
         }
+        .alert("Photos Need Retaking", isPresented: $showRetakeAlert) {
+            Button("OK") {
+                clearPhotos()
+            }
+        } message: {
+            Text(retakeAlertBody)
+        }
+    }
+
+    private var retakeAlertBody: String {
+        var body = retakeMessage
+        if !retakeReasons.isEmpty {
+            body += "\n\nReasons:\n\u{2022} " + retakeReasons.joined(separator: "\n\u{2022} ")
+        }
+        return body
     }
 
     // MARK: - Header
@@ -163,18 +190,36 @@ struct PhotoUploadView: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(isSubmitting)
+    }
+
+    // MARK: - Error Banner
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: DLSpacing.sm) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(DLFont.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button {
+                self.errorMessage = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(DLSpacing.md)
+        .background(Color.orange.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: DLRadius.md))
     }
 
     // MARK: - Submit
 
     private var submitButton: some View {
         Button {
-            isSubmitting = true
-            // Simulate upload delay, then advance
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                isSubmitting = false
-                onNext()
-            }
+            Task { await submitPhotos() }
         } label: {
             HStack(spacing: DLSpacing.sm) {
                 if isSubmitting {
@@ -183,19 +228,77 @@ struct PhotoUploadView: View {
                 } else {
                     Image(systemName: "arrow.up.circle.fill")
                 }
-                Text(isSubmitting ? "Uploading..." : "Submit Photos")
+                Text(isSubmitting ? uploadPhase : "Submit Photos")
                     .fontWeight(.semibold)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(
                 RoundedRectangle(cornerRadius: DLRadius.md)
-                    .fill(allPhotosSelected ? DLColor.primaryFallback : Color(.systemGray4))
+                    .fill(allPhotosSelected && !isSubmitting ? DLColor.primaryFallback : Color(.systemGray4))
             )
             .foregroundStyle(.white)
         }
         .disabled(!allPhotosSelected || isSubmitting)
         .animation(.easeInOut, value: allPhotosSelected)
+    }
+
+    // MARK: - Actions
+
+    private func submitPhotos() async {
+        guard let front = frontImageData,
+              let left = leftImageData,
+              let right = rightImageData else { return }
+
+        let concerns = concernsForm ?? SkinConcernsForm()
+        isSubmitting = true
+        errorMessage = nil
+        uploadPhase = "Uploading photos..."
+
+        do {
+            // Phase 2: AI Analysis
+            try await Task.sleep(for: .milliseconds(500))
+            uploadPhase = "AI is analyzing your skin..."
+
+            let scan = try await APIService.shared.uploadScan(
+                email: appState.userEmail,
+                frontImageData: front,
+                leftImageData: left,
+                rightImageData: right,
+                concerns: concerns
+            )
+
+            // Success haptic feedback
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+
+            isSubmitting = false
+            onSubmit(scan)
+
+        } catch let error as APIError where error.isRetakeRequired {
+            isSubmitting = false
+            if case .retakeRequired(let message, let reasons) = error {
+                retakeMessage = message
+                retakeReasons = reasons
+                showRetakeAlert = true
+            }
+        } catch {
+            isSubmitting = false
+            errorMessage = "Upload failed: \(error.localizedDescription). Please try again."
+
+            // Error haptic
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+        }
+    }
+
+    private func clearPhotos() {
+        frontImage = nil
+        leftImage = nil
+        rightImage = nil
+        frontImageData = nil
+        leftImageData = nil
+        rightImageData = nil
     }
 
     // MARK: - Helpers
@@ -216,5 +319,6 @@ struct PhotoUploadView: View {
 }
 
 #Preview {
-    PhotoUploadView(onNext: {})
+    PhotoUploadView(concernsForm: nil, onSubmit: { _ in })
+        .environment(AppState())
 }

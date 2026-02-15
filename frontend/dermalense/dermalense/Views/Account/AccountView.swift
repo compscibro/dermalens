@@ -38,6 +38,45 @@ struct AccountView: View {
             .sheet(isPresented: $showEditProfile) {
                 EditProfileView()
             }
+            .task {
+                await fetchData()
+            }
+            .refreshable {
+                await fetchData()
+            }
+        }
+    }
+
+    // MARK: - Data Fetching
+
+    private func fetchData() async {
+        let email = appState.userEmail
+        guard !email.isEmpty else { return }
+
+        async let profileTask: () = fetchProfile(email: email)
+        async let historyTask: () = fetchHistory(email: email)
+        _ = await (profileTask, historyTask)
+    }
+
+    private func fetchProfile(email: String) async {
+        do {
+            appState.isLoadingProfile = true
+            let profile = try await APIService.shared.getProfile(email: email)
+            appState.user = profile
+            appState.isLoadingProfile = false
+        } catch {
+            appState.isLoadingProfile = false
+        }
+    }
+
+    private func fetchHistory(email: String) async {
+        do {
+            appState.isLoadingHistory = true
+            let history = try await APIService.shared.getScanHistory(email: email)
+            appState.scanHistory = history
+            appState.isLoadingHistory = false
+        } catch {
+            appState.isLoadingHistory = false
         }
     }
 
@@ -62,12 +101,18 @@ struct AccountView: View {
             }
 
             VStack(spacing: 4) {
-                Text(appState.user.name)
-                    .font(DLFont.title)
+                if appState.isLoadingProfile && appState.user.name.isEmpty {
+                    ProgressView()
+                } else {
+                    Text(appState.user.name.isEmpty ? "Your Name" : appState.user.name)
+                        .font(DLFont.title)
 
-                Text("@\(appState.user.username)")
-                    .font(DLFont.body)
-                    .foregroundStyle(.secondary)
+                    if !appState.user.username.isEmpty {
+                        Text("@\(appState.user.username)")
+                            .font(DLFont.body)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             // Stats row
@@ -110,18 +155,19 @@ struct AccountView: View {
     }
 
     private var streak: String {
-        return "\(appState.scanHistory.count)w"
+        let count = appState.scanHistory.count
+        return count > 0 ? "\(count)w" : "--"
     }
 
     // MARK: - Profile Info Card
 
     private var profileInfoCard: some View {
         VStack(spacing: 0) {
-            infoRow(icon: "person.fill", label: "Name", value: appState.user.name)
+            infoRow(icon: "person.fill", label: "Name", value: appState.user.name.isEmpty ? "--" : appState.user.name)
             Divider().padding(.leading, 48)
-            infoRow(icon: "envelope.fill", label: "Email", value: appState.user.email)
+            infoRow(icon: "envelope.fill", label: "Email", value: appState.user.email.isEmpty ? "--" : appState.user.email)
             Divider().padding(.leading, 48)
-            infoRow(icon: "at", label: "Username", value: "@\(appState.user.username)")
+            infoRow(icon: "at", label: "Username", value: appState.user.username.isEmpty ? "--" : "@\(appState.user.username)")
         }
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: DLRadius.lg))
@@ -156,19 +202,28 @@ struct AccountView: View {
                 Text("Scan History")
                     .font(DLFont.headline)
                 Spacer()
-                NavigationLink {
-                    FullHistoryView()
-                } label: {
-                    Text("See All")
-                        .font(DLFont.caption)
-                        .foregroundStyle(DLColor.primaryFallback)
+                if !appState.scanHistory.isEmpty {
+                    NavigationLink {
+                        FullHistoryView()
+                    } label: {
+                        Text("See All")
+                            .font(DLFont.caption)
+                            .foregroundStyle(DLColor.primaryFallback)
+                    }
                 }
             }
 
-            if appState.scanHistory.isEmpty {
+            if appState.isLoadingHistory && appState.scanHistory.isEmpty {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .padding(DLSpacing.xl)
+            } else if appState.scanHistory.isEmpty {
                 emptyHistoryView
             } else {
-                ForEach(appState.scanHistory) { record in
+                ForEach(appState.scanHistory.prefix(5)) { record in
                     NavigationLink {
                         HistoryDetailView(record: record)
                     } label: {

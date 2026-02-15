@@ -1,165 +1,155 @@
 """
-Gemini Vision service for skin analysis
-Replaces NanoBanana — sends face photos to Gemini multimodal API
+Gemini Vision service for skin analysis.
+Uses the new google.genai SDK with structured JSON output (response_schema).
+Replaces the old google-generativeai manual-JSON-parsing approach.
 """
-import json
+import os
 import uuid
 import logging
-from PIL import Image
-import io
+from typing import Optional
 
-import google.generativeai as genai
-
+from google.genai import Client, types
+from backend.services.scoring.metrics import SkinMetrics
 from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+MODEL_ID = os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash")
 
-class GeminiVisionService:
-    """Analyze skin photos using Gemini Vision multimodal API."""
+SYSTEM_INSTRUCTIONS = """
+You are a cosmetic skin-feature extractor.
+Do NOT diagnose medical conditions. Do NOT claim diseases (e.g., rosacea, eczema).
+Only describe visible features and output numeric scores from 0-100.
 
-    def __init__(self):
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
-
-    def analyze_skin(
-        self,
-        front_image: bytes,
-        left_image: bytes,
-        right_image: bytes,
-        concerns: dict,
-    ) -> dict:
-        """
-        Analyze 3 face photos using Gemini Vision.
-        Returns structured analysis matching SkinScanSchema.
-        """
-        images = [
-            Image.open(io.BytesIO(front_image)),
-            Image.open(io.BytesIO(left_image)),
-            Image.open(io.BytesIO(right_image)),
-        ]
-
-        prompt = self._build_analysis_prompt(concerns)
-        response = self.model.generate_content([prompt, *images])
-        return self._parse_analysis(response.text)
-
-    def generate_routine(self, analysis: dict, concerns: dict) -> dict:
-        """
-        Generate a personalized skincare routine based on analysis and concerns.
-        Returns structured data matching RoutinePlanSchema.
-        """
-        prompt = self._build_routine_prompt(analysis, concerns)
-        response = self.model.generate_content(prompt)
-        return self._parse_routine(response.text)
-
-    def _build_analysis_prompt(self, concerns: dict) -> str:
-        primary = ", ".join(concerns.get("primaryConcerns", []))
-        insecurity = concerns.get("biggestInsecurity", "Not specified")
-        skin_type = concerns.get("skinType", "Not specified")
-        sensitivity = concerns.get("sensitivityLevel", "Not specified")
-        notes = concerns.get("additionalNotes", "None")
-
-        return f"""You are a dermatological AI assistant analyzing facial skin photos.
-You are given 3 photos: front face, left profile, right profile.
-
-The user has reported the following concerns:
-- Primary concerns: {primary}
-- Biggest insecurity: {insecurity}
-- Skin type: {skin_type}
-- Sensitivity level: {sensitivity}
-- Additional notes: {notes}
-
-Analyze the images and return a JSON object with EXACTLY this structure:
-{{
-  "scores": [
-    {{"name": "Acne", "score": <0-100 float>, "icon": "circle.fill", "color": "<green|yellow|orange|red>"}},
-    {{"name": "Redness", "score": <0-100 float>, "icon": "flame.fill", "color": "<green|yellow|orange|red>"}},
-    {{"name": "Oiliness", "score": <0-100 float>, "icon": "drop.fill", "color": "<green|yellow|orange|red>"}},
-    {{"name": "Dryness", "score": <0-100 float>, "icon": "sun.max.fill", "color": "<green|yellow|orange|red>"}},
-    {{"name": "Wrinkles", "score": <0-100 float>, "icon": "lines.measurement.horizontal", "color": "<green|yellow|orange|red>"}},
-    {{"name": "Dark Spots", "score": <0-100 float>, "icon": "circle.dashed", "color": "<green|yellow|orange|red>"}},
-    {{"name": "Pores", "score": <0-100 float>, "icon": "circle.grid.3x3.fill", "color": "<green|yellow|orange|red>"}},
-    {{"name": "Texture", "score": <0-100 float>, "icon": "square.grid.3x3.topleft.filled", "color": "<green|yellow|orange|red>"}}
-  ],
-  "overallScore": <0-100 float>,
-  "summary": "<2-3 sentence summary of skin condition>"
-}}
-
-Score meaning: Higher score = more of that issue detected (e.g., acne score 80 = significant acne).
-Color rules: 0-25 = green (Good), 26-50 = yellow (Fair), 51-75 = orange (Needs Attention), 76-100 = red (Poor).
-Overall score is a weighted health score where higher = better skin health.
-
-Return ONLY valid JSON, no markdown formatting or code blocks."""
-
-    def _build_routine_prompt(self, analysis: dict, concerns: dict) -> str:
-        return f"""Based on this skin analysis and user concerns, generate a personalized skincare routine.
-
-Skin Analysis: {json.dumps(analysis)}
-User Concerns: {json.dumps(concerns)}
-
-Return a JSON object with EXACTLY this structure:
-{{
-  "morningSteps": [
-    {{"order": 1, "name": "step name", "description": "detailed instruction", "productSuggestion": "specific product name", "icon": "SF Symbol name"}},
-    ...
-  ],
-  "eveningSteps": [...],
-  "weeklySteps": [...]
-}}
-
-Guidelines:
-- Morning routine: 4-5 steps (cleanser, serum/treatment, moisturizer, sunscreen)
-- Evening routine: 4-6 steps (double cleanse, treatment, serum, moisturizer)
-- Weekly routine: 1-3 steps (exfoliant, mask)
-- Tailor products to the user's specific skin concerns and type
-- Use real, purchasable product names
-
-Use these SF Symbol icon names for steps:
-- "drop.fill" for cleansers
-- "sun.min.fill" for vitamin C / brightening
-- "humidity.fill" for moisturizers
-- "sun.max.trianglebadge.exclamationmark.fill" for sunscreen
-- "testtube.2" for serums
-- "moon.fill" for night treatments
-- "sparkles" for exfoliants
-- "face.dashed" for masks
-
-Return ONLY valid JSON, no markdown formatting or code blocks."""
-
-    def _parse_analysis(self, response_text: str) -> dict:
-        """Parse Gemini's analysis response into structured data."""
-        text = self._strip_code_fences(response_text)
-        parsed = json.loads(text)
-
-        # Add UUIDs to each metric
-        for score in parsed["scores"]:
-            score["id"] = str(uuid.uuid4())
-
-        return parsed
-
-    def _parse_routine(self, response_text: str) -> dict:
-        """Parse Gemini's routine response into structured data."""
-        text = self._strip_code_fences(response_text)
-        parsed = json.loads(text)
-
-        # Add UUIDs to each step
-        for section in ["morningSteps", "eveningSteps", "weeklySteps"]:
-            for step in parsed.get(section, []):
-                step["id"] = str(uuid.uuid4())
-
-        return parsed
-
-    @staticmethod
-    def _strip_code_fences(text: str) -> str:
-        """Strip markdown code fences from Gemini response."""
-        text = text.strip()
-        if text.startswith("```"):
-            # Remove first line (```json or ```)
-            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        return text.strip()
+If image quality is insufficient (dark, blurry, face not centered, heavy shadows, extreme angle),
+set:
+- retake_required = true
+- confidence <= 40
+- include clear retake_reasons
+Return ONLY JSON that matches the schema exactly.
+"""
 
 
-# Singleton instance
-gemini_vision_service = GeminiVisionService()
+def _img_part(image_bytes: bytes, mime_type: str = "image/jpeg") -> types.Part:
+    return types.Part(
+        inline_data=types.Blob(data=image_bytes, mime_type=mime_type)
+    )
+
+
+def analyze_face_three_angles(
+    front_bytes: bytes,
+    left_bytes: Optional[bytes] = None,
+    right_bytes: Optional[bytes] = None,
+) -> SkinMetrics:
+    """
+    Send 1-3 face photos to Gemini and get back structured SkinMetrics.
+    Uses response_schema so the model returns validated JSON directly.
+    """
+    client = Client(api_key=settings.GEMINI_API_KEY)
+
+    parts = [
+        types.Part(text="FRONT IMAGE:"),
+        _img_part(front_bytes),
+    ]
+
+    if left_bytes:
+        parts += [types.Part(text="LEFT IMAGE:"), _img_part(left_bytes)]
+
+    if right_bytes:
+        parts += [types.Part(text="RIGHT IMAGE:"), _img_part(right_bytes)]
+
+    prompt = """
+You will receive 1 to 3 images labeled FRONT IMAGE, LEFT IMAGE, RIGHT IMAGE.
+
+Use ALL provided images to estimate cosmetic skin feature scores:
+- acne, redness, oiliness, dryness, texture (each 0-100)
+
+Also return:
+- confidence (0-100): Higher when all 3 angles are provided and images are clear.
+  If only 1 image is provided, lower confidence accordingly.
+- retake_required (boolean)
+- retake_reasons (list of short strings)
+- notes (list of short, neutral, non-diagnostic observations)
+
+Rules:
+- Do NOT diagnose medical conditions and do NOT name diseases.
+- If images are too dark/blurry/not centered/extreme angles or face not visible, set retake_required=true and confidence<=40.
+Return ONLY JSON matching the schema.
+"""
+    parts.append(types.Part(text=prompt))
+
+    resp = client.models.generate_content(
+        model=MODEL_ID,
+        contents=[types.Content(parts=parts)],
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTIONS,
+            response_mime_type="application/json",
+            response_schema=SkinMetrics,
+            temperature=0.2,
+        ),
+    )
+
+    return resp.parsed
+
+
+# ---------------------------------------------------------------------------
+# Legacy adapter — converts SkinMetrics to the dict format that
+# the existing API (scans.py, SkinScanSchema) expects.
+# ---------------------------------------------------------------------------
+
+def _color_for_score(score: float) -> str:
+    """Map 0-100 score to colour bucket used by the iOS frontend."""
+    if score <= 25:
+        return "green"
+    elif score <= 50:
+        return "yellow"
+    elif score <= 75:
+        return "orange"
+    return "red"
+
+
+def metrics_to_legacy_analysis(metrics: SkinMetrics) -> dict:
+    """
+    Convert the new SkinMetrics model to the dict shape that
+    SkinScanSchema / the iOS client expects:
+        {scores: [{name, score, icon, color, id}], overallScore, summary}
+    """
+    metric_defs = [
+        ("Acne", metrics.acne, "circle.fill"),
+        ("Redness", metrics.redness, "flame.fill"),
+        ("Oiliness", metrics.oiliness, "drop.fill"),
+        ("Dryness", metrics.dryness, "sun.max.fill"),
+        ("Texture", metrics.texture, "square.grid.3x3.topleft.filled"),
+    ]
+
+    scores = []
+    total = 0
+    for name, value, icon in metric_defs:
+        total += value
+        scores.append({
+            "id": str(uuid.uuid4()),
+            "name": name,
+            "score": float(value),
+            "icon": icon,
+            "color": _color_for_score(value),
+        })
+
+    # Overall skin health = inverse of average issue severity
+    avg_issue = total / len(metric_defs)
+    overall_score = round(100 - avg_issue, 1)
+
+    # Build a short summary from notes or a generic one
+    if metrics.notes:
+        summary = " ".join(metrics.notes[:3])
+    else:
+        summary = (
+            f"Skin analysis complete. Confidence: {metrics.confidence}%. "
+            f"Key areas: acne {metrics.acne}, redness {metrics.redness}, "
+            f"texture {metrics.texture}."
+        )
+
+    return {
+        "scores": scores,
+        "overallScore": overall_score,
+        "summary": summary,
+    }

@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ChatView: View {
-    @State private var messages: [ChatMessage] = ChatMessage.sampleConversation
+    @Environment(AppState.self) private var appState
     @State private var inputText = ""
     @State private var isAITyping = false
     @FocusState private var isInputFocused: Bool
@@ -21,6 +21,9 @@ struct ChatView: View {
             Divider()
             inputBar
             aiDisclaimer
+        }
+        .task {
+            await loadChatHistoryIfNeeded()
         }
     }
 
@@ -52,16 +55,6 @@ struct ChatView: View {
             }
 
             Spacer()
-
-            Button {
-                // Upload new photos action
-            } label: {
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 14))
-                    .padding(8)
-                    .background(Circle().fill(Color(.systemGray6)))
-            }
-            .tint(.primary)
         }
         .padding(.horizontal, DLSpacing.md)
         .padding(.vertical, DLSpacing.sm)
@@ -73,12 +66,21 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: DLSpacing.sm) {
+                    if appState.chatMessages.isEmpty && !isAITyping {
+                        welcomeMessage
+                            .padding(.top, DLSpacing.lg)
+                    }
+
                     quickActionsBar
                         .padding(.top, DLSpacing.sm)
 
-                    ForEach(messages) { message in
+                    ForEach(appState.chatMessages) { message in
                         messageBubble(message)
                             .id(message.id)
+                    }
+
+                    if let error = appState.chatError {
+                        errorMessage(error)
                     }
 
                     if isAITyping {
@@ -88,13 +90,27 @@ struct ChatView: View {
                 .padding(.horizontal, DLSpacing.md)
                 .padding(.bottom, DLSpacing.sm)
             }
-            .onChange(of: messages.count) { _, _ in
-                if let last = messages.last {
+            .onChange(of: appState.chatMessages.count) { _, _ in
+                if let last = appState.chatMessages.last {
                     withAnimation {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
                 }
             }
+        }
+    }
+
+    private var welcomeMessage: some View {
+        VStack(spacing: DLSpacing.md) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 32))
+                .foregroundStyle(DLColor.primaryFallback)
+
+            Text("Ask me anything about your skin analysis, routine, or skincare in general!")
+                .font(DLFont.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, DLSpacing.xl)
         }
     }
 
@@ -131,6 +147,20 @@ struct ChatView: View {
 
             if !message.isUser { Spacer(minLength: 48) }
         }
+    }
+
+    private func errorMessage(_ error: String) -> some View {
+        HStack(spacing: DLSpacing.xs) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(.orange)
+            Text(error)
+                .font(DLFont.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(DLSpacing.sm)
+        .background(Color.orange.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: DLRadius.sm))
     }
 
     private var typingIndicator: some View {
@@ -175,9 +205,9 @@ struct ChatView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: DLSpacing.sm) {
                 quickActionChip("Is my routine working?", icon: "checkmark.circle")
-                quickActionChip("Upload new photos", icon: "camera")
-                quickActionChip("Change a product", icon: "arrow.triangle.2.circlepath")
                 quickActionChip("Explain a step", icon: "questionmark.circle")
+                quickActionChip("Change a product", icon: "arrow.triangle.2.circlepath")
+                quickActionChip("Skincare tips", icon: "lightbulb")
             }
         }
     }
@@ -224,12 +254,12 @@ struct ChatView: View {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 32))
                     .foregroundStyle(
-                        inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isAITyping
                         ? Color(.systemGray4)
                         : DLColor.primaryFallback
                     )
             }
-            .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isAITyping)
         }
         .padding(.horizontal, DLSpacing.md)
         .padding(.vertical, DLSpacing.sm)
@@ -252,30 +282,57 @@ struct ChatView: View {
 
     // MARK: - Actions
 
+    private func loadChatHistoryIfNeeded() async {
+        guard let sessionId = appState.chatSessionId,
+              appState.chatMessages.isEmpty else { return }
+
+        do {
+            let history = try await APIService.shared.getChatHistory(
+                email: appState.userEmail,
+                sessionId: sessionId
+            )
+            appState.chatMessages = history
+        } catch {
+            // Silently fail — user can still start a new conversation
+        }
+    }
+
     private func sendMessage(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        // Add user message immediately
         let userMessage = ChatMessage(id: UUID(), content: trimmed, isUser: true, timestamp: Date())
-        messages.append(userMessage)
+        appState.chatMessages.append(userMessage)
         inputText = ""
         isInputFocused = false
+        appState.chatError = nil
 
-        // Simulate AI response
+        // Generate session ID if first message
+        if appState.chatSessionId == nil {
+            appState.chatSessionId = UUID().uuidString.lowercased()
+        }
+
+        // Send to API
         isAITyping = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            isAITyping = false
-            let aiResponse = ChatMessage(
-                id: UUID(),
-                content: "Thanks for sharing! Based on your progress, I'd recommend continuing your current routine for another week. Consistency is key. If you'd like, upload new photos and I can do a fresh comparison scan to track changes.",
-                isUser: false,
-                timestamp: Date()
-            )
-            messages.append(aiResponse)
+        Task {
+            do {
+                let aiResponse = try await APIService.shared.sendChatMessage(
+                    email: appState.userEmail,
+                    content: trimmed,
+                    sessionId: appState.chatSessionId
+                )
+                isAITyping = false
+                appState.chatMessages.append(aiResponse)
+            } catch {
+                isAITyping = false
+                appState.chatError = "Failed to get a response. Please try again."
+            }
         }
     }
 }
 
 #Preview {
     ChatView()
+        .environment(AppState())
 }

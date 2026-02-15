@@ -148,6 +148,8 @@
 				DEVELOPMENT_TEAM = 5Q9NUY565A;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = dermalense/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "DermaLens needs camera access to take photos of your skin for analysis.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "DermaLens needs photo library access to select skin photos for analysis.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -157,7 +159,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = MohammedAbdurRahman.dermalense;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mohammedabdurrahman.dermalens;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -179,6 +181,8 @@
 				DEVELOPMENT_TEAM = 5Q9NUY565A;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = dermalense/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "DermaLens needs camera access to take photos of your skin for analysis.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "DermaLens needs photo library access to select skin photos for analysis.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -188,7 +192,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = MohammedAbdurRahman.dermalense;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mohammedabdurrahman.dermalens;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

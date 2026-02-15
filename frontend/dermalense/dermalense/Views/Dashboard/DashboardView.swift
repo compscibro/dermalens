@@ -10,6 +10,7 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
     @State private var currentStep: DashboardStep = .concerns
+    @State private var concernsForm: SkinConcernsForm?
 
     enum DashboardStep: Int, CaseIterable {
         case concerns = 0
@@ -47,17 +48,53 @@ struct DashboardView: View {
                     .padding(.top, DLSpacing.sm)
 
                 TabView(selection: $currentStep) {
-                    ConcernsFormView(onNext: { advanceStep() })
-                        .tag(DashboardStep.concerns)
+                    ConcernsFormView(onSubmit: { form in
+                        concernsForm = form
+                        appState.currentConcernsForm = form
+                        advanceStep()
+                    })
+                    .tag(DashboardStep.concerns)
 
-                    PhotoUploadView(onNext: { advanceStep() })
-                        .tag(DashboardStep.upload)
+                    PhotoUploadView(
+                        concernsForm: concernsForm,
+                        onSubmit: { scan in
+                            appState.currentScan = scan
+                            advanceStep()
+                            // Fetch routine for this scan
+                            Task {
+                                do {
+                                    let routine = try await APIService.shared.getRoutine(
+                                        email: appState.userEmail,
+                                        scanId: scan.id.uuidString.lowercased()
+                                    )
+                                    appState.routinePlan = routine
+                                } catch {
+                                    // Routine fetch failed
+                                }
+                            }
+                            // Refresh scan history
+                            Task {
+                                if let history = try? await APIService.shared.getScanHistory(
+                                    email: appState.userEmail
+                                ) {
+                                    appState.scanHistory = history
+                                }
+                            }
+                        }
+                    )
+                    .tag(DashboardStep.upload)
 
-                    SkinAnalysisView(onNext: { advanceStep() })
-                        .tag(DashboardStep.analysis)
+                    SkinAnalysisView(
+                        scan: appState.currentScan,
+                        onNext: { advanceStep() }
+                    )
+                    .tag(DashboardStep.analysis)
 
-                    RoutinePlanView(onNext: { advanceStep() })
-                        .tag(DashboardStep.routine)
+                    RoutinePlanView(
+                        plan: appState.routinePlan,
+                        onNext: { advanceStep() }
+                    )
+                    .tag(DashboardStep.routine)
 
                     ChatView()
                         .tag(DashboardStep.chat)
@@ -70,7 +107,7 @@ struct DashboardView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        currentStep = .concerns
+                        resetFlow()
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
                             .font(.system(size: 14, weight: .semibold))
@@ -92,8 +129,11 @@ struct DashboardView: View {
     }
 
     private func stepPill(for step: DashboardStep) -> some View {
-        Button {
-            withAnimation { currentStep = step }
+        let canNav = canNavigateTo(step)
+        return Button {
+            if canNav {
+                withAnimation { currentStep = step }
+            }
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: step.icon)
@@ -107,18 +147,41 @@ struct DashboardView: View {
             .padding(.vertical, 8)
             .background(
                 Capsule()
-                    .fill(currentStep == step ? DLColor.primaryFallback : Color(.systemGray6))
+                    .fill(currentStep == step ? DLColor.primaryFallback : canNav ? Color(.systemGray6) : Color(.systemGray6).opacity(0.5))
             )
-            .foregroundStyle(currentStep == step ? .white : .secondary)
+            .foregroundStyle(currentStep == step ? .white : canNav ? Color.secondary : Color.secondary.opacity(0.4))
         }
         .buttonStyle(.plain)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: currentStep)
+    }
+
+    private func canNavigateTo(_ step: DashboardStep) -> Bool {
+        switch step {
+        case .concerns: return true
+        case .upload: return concernsForm != nil
+        case .analysis: return appState.currentScan != nil
+        case .routine: return appState.routinePlan != nil
+        case .chat: return appState.currentScan != nil
+        }
     }
 
     private func advanceStep() {
         let allCases = DashboardStep.allCases
         if let idx = allCases.firstIndex(of: currentStep), idx + 1 < allCases.count {
             withAnimation { currentStep = allCases[idx + 1] }
+        }
+    }
+
+    private func resetFlow() {
+        withAnimation {
+            currentStep = .concerns
+            concernsForm = nil
+            appState.currentScan = nil
+            appState.routinePlan = nil
+            appState.chatMessages = []
+            appState.chatSessionId = nil
+            appState.scanError = nil
+            appState.retakeRequired = false
         }
     }
 }

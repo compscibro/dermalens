@@ -24,7 +24,8 @@ class Settings(BaseSettings):
 
     # Gemini AI
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_VISION_MODEL: str = "gemini-2.5-flash"
 
     # Image limits
     MAX_IMAGE_SIZE_MB: int = 10

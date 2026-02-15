@@ -14,10 +14,47 @@ import Observation
 class AppState {
     var isOnboarded: Bool = false
     var user: UserProfile = .placeholder
-    var scanHistory: [ScanRecord] = ScanRecord.sampleHistory
+    var scanHistory: [ScanRecord] = []
     var currentScan: SkinScan?
     var chatMessages: [ChatMessage] = []
     var routinePlan: RoutinePlan?
+
+    // Current concerns form (shared between dashboard steps)
+    var currentConcernsForm: SkinConcernsForm?
+
+    // Chat session tracking
+    var chatSessionId: String?
+
+    // Loading states
+    var isUploadingScan: Bool = false
+    var isLoadingProfile: Bool = false
+    var isLoadingHistory: Bool = false
+    var isSendingMessage: Bool = false
+    var isLoadingRoutine: Bool = false
+
+    // Error states
+    var scanError: String?
+    var profileError: String?
+    var chatError: String?
+
+    // Upload progress feedback
+    var uploadProgress: String?
+
+    // Retake state
+    var retakeRequired: Bool = false
+    var retakeMessage: String?
+    var retakeReasons: [String] = []
+
+    // Persistence via UserDefaults
+    var userEmail: String {
+        get { UserDefaults.standard.string(forKey: "dermalens_userEmail") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "dermalens_userEmail") }
+    }
+
+    var savedIsOnboarded: Bool {
+        get { UserDefaults.standard.bool(forKey: "dermalens_isOnboarded") }
+        set { UserDefaults.standard.set(newValue, forKey: "dermalens_isOnboarded") }
+    }
 }
 
 // MARK: - User
@@ -31,9 +68,9 @@ struct UserProfile: Identifiable {
 
     static let placeholder = UserProfile(
         id: UUID(),
-        name: "Mohammed",
-        email: "mohammed@example.com",
-        username: "m_abdurrahman",
+        name: "",
+        email: "",
+        username: "",
         avatarSystemName: "person.crop.circle.fill"
     )
 }
@@ -67,30 +104,28 @@ struct SkinMetric: Identifiable {
     let name: String
     let score: Double // 0.0 - 100.0
     let icon: String
-    let color: MetricColor
+    let color: String
 
-    enum MetricColor: String {
-        case green, yellow, orange, red
-
-        var description: String {
-            switch self {
-            case .green: return "Good"
-            case .yellow: return "Fair"
-            case .orange: return "Needs Attention"
-            case .red: return "Poor"
-            }
+    /// Convert color string to SwiftUI-friendly description.
+    var colorDescription: String {
+        switch color.lowercased() {
+        case "green": return "Good"
+        case "yellow": return "Fair"
+        case "orange": return "Needs Attention"
+        case "red": return "Poor"
+        default: return "Unknown"
         }
     }
 
     static let sampleMetrics: [SkinMetric] = [
-        SkinMetric(id: UUID(), name: "Acne", score: 25.3, icon: "circle.fill", color: .yellow),
-        SkinMetric(id: UUID(), name: "Redness", score: 15.0, icon: "flame.fill", color: .green),
-        SkinMetric(id: UUID(), name: "Oiliness", score: 42.8, icon: "drop.fill", color: .orange),
-        SkinMetric(id: UUID(), name: "Dryness", score: 18.5, icon: "sun.max.fill", color: .green),
-        SkinMetric(id: UUID(), name: "Wrinkles", score: 8.2, icon: "lines.measurement.horizontal", color: .green),
-        SkinMetric(id: UUID(), name: "Dark Spots", score: 31.0, icon: "circle.dashed", color: .yellow),
-        SkinMetric(id: UUID(), name: "Pores", score: 55.1, icon: "circle.grid.3x3.fill", color: .orange),
-        SkinMetric(id: UUID(), name: "Texture", score: 68.4, icon: "square.grid.3x3.topleft.filled", color: .red),
+        SkinMetric(id: UUID(), name: "Acne", score: 25.3, icon: "circle.fill", color: "yellow"),
+        SkinMetric(id: UUID(), name: "Redness", score: 15.0, icon: "flame.fill", color: "green"),
+        SkinMetric(id: UUID(), name: "Oiliness", score: 42.8, icon: "drop.fill", color: "orange"),
+        SkinMetric(id: UUID(), name: "Dryness", score: 18.5, icon: "sun.max.fill", color: "green"),
+        SkinMetric(id: UUID(), name: "Wrinkles", score: 8.2, icon: "lines.measurement.horizontal", color: "green"),
+        SkinMetric(id: UUID(), name: "Dark Spots", score: 31.0, icon: "circle.dashed", color: "yellow"),
+        SkinMetric(id: UUID(), name: "Pores", score: 55.1, icon: "circle.grid.3x3.fill", color: "orange"),
+        SkinMetric(id: UUID(), name: "Texture", score: 68.4, icon: "square.grid.3x3.topleft.filled", color: "red"),
     ]
 }
 
@@ -99,27 +134,12 @@ struct SkinMetric: Identifiable {
 struct SkinConcernsForm {
     var primaryConcerns: Set<String> = []
     var biggestInsecurity: String = ""
-    var skinType: SkinType = .normal
-    var sensitivityLevel: SensitivityLevel = .moderate
+    var skinType: String = "Normal"
+    var sensitivityLevel: String = "Moderate"
     var additionalNotes: String = ""
 
-    enum SkinType: String, CaseIterable, Identifiable {
-        case dry = "Dry"
-        case oily = "Oily"
-        case combination = "Combination"
-        case normal = "Normal"
-        case sensitive = "Sensitive"
-
-        var id: String { rawValue }
-    }
-
-    enum SensitivityLevel: String, CaseIterable, Identifiable {
-        case low = "Low"
-        case moderate = "Moderate"
-        case high = "High"
-
-        var id: String { rawValue }
-    }
+    static let skinTypes = ["Dry", "Oily", "Combination", "Normal", "Sensitive"]
+    static let sensitivityLevels = ["Low", "Moderate", "High"]
 
     static let availableConcerns = [
         "Acne & Breakouts",
@@ -131,7 +151,7 @@ struct SkinConcernsForm {
         "Large Pores",
         "Uneven Texture",
         "Dark Circles",
-        "Sun Damage"
+        "Sun Damage",
     ]
 }
 
