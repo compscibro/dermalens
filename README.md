@@ -175,8 +175,8 @@ All endpoints are prefixed with `/api/v1`.
 
 ## 👥 Contributors
 
-- [Mohammed Abdur Rahman](https://github.com/compscibro)
-- John Lizama
+- [Mohammed Abdur Rahman](https://www.linkedin.com/in/compscibro/)
+- [John Lizama](https://github.com/john3lizama)
 - [Aahil Shaik](https://github.com/bizaahil)
 - [Terina Ishaqzai](https://github.com/Terinaishaqzai)
 
