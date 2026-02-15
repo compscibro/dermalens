@@ -2,6 +2,10 @@
 
 AI-powered skincare analysis that turns a few selfies into personalized routines. Snap three photos, answer a quick skin quiz, and receive metric-level analysis with a morning, evening, and weekly plan all in under a minute.
 
+## 🖥️ Demo
+
+[![Watch the demo](https://img.youtube.com/vi/7L9-tI-OdcM/hqdefault.jpg)](https://youtu.be/7L9-tI-OdcM?si=Rxp_J0sR3fucKBGR)
+
 ## 🎯 Why We Built This
 
 Skincare is personal, but most advice is generic. Dermatologist visits are expensive and hard to schedule, while online quizzes give one-size-fits-all recommendations that ignore what your skin actually looks like. DermaLens bridges that gap as it uses AI to objectively analyze your skin from photos, then generates a routine grounded in real dermatological rules (not marketing). The goal is to make evidence-based skincare guidance accessible to anyone with a phone.
