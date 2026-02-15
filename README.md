@@ -177,7 +177,7 @@ All endpoints are prefixed with `/api/v1`.
 
 - [Mohammed Abdur Rahman](https://github.com/compscibro)
 - John Lizama
-- [Aahil Shaik] (https://www.linkedin.com/in/aahil-shaik-04532a2b5/)
+- [Aahil Shaik](https://github.com/bizaahil)
 - Terina Ishaqzai
 
 ## 📄 License
