@@ -11,6 +11,7 @@ struct DashboardView: View {
     @Environment(AppState.self) private var appState
     @State private var currentStep: DashboardStep = .concerns
     @State private var concernsForm: SkinConcernsForm?
+    @State private var flowId = UUID()
 
     enum DashboardStep: Int, CaseIterable {
         case concerns = 0
@@ -99,6 +100,7 @@ struct DashboardView: View {
                     ChatView()
                         .tag(DashboardStep.chat)
                 }
+                .id(flowId)
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.easeInOut(duration: 0.3), value: currentStep)
             }
@@ -177,11 +179,15 @@ struct DashboardView: View {
             currentStep = .concerns
             concernsForm = nil
             appState.currentScan = nil
+            appState.currentConcernsForm = nil
             appState.routinePlan = nil
             appState.chatMessages = []
             appState.chatSessionId = nil
             appState.scanError = nil
             appState.retakeRequired = false
+            // Change flowId to force SwiftUI to destroy and recreate all child views,
+            // resetting their internal @State (form fields, selected photos, etc.)
+            flowId = UUID()
         }
     }
 }
