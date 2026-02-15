@@ -1,742 +1,515 @@
-# DermaLens Backend - Complete Development Guide
+# DermaLens Developer Guide
 
-## 📖 Table of Contents
+## Table of Contents
+
 1. [Architecture Overview](#architecture-overview)
-2. [Getting Started](#getting-started)
-3. [API Flow Diagrams](#api-flow-diagrams)
-4. [Database Schema](#database-schema)
-5. [Service Integrations](#service-integrations)
-6. [Development Workflow](#development-workflow)
-7. [Testing Strategy](#testing-strategy)
-8. [Deployment Guide](#deployment-guide)
+2. [Repository Structure](#repository-structure)
+3. [Getting Started](#getting-started)
+4. [Backend](#backend)
+5. [iOS Frontend](#ios-frontend)
+6. [API Reference](#api-reference)
+7. [Data Flow](#data-flow)
+8. [Deployment](#deployment)
+9. [Troubleshooting](#troubleshooting)
 
-## 🏛️ Architecture Overview
+---
 
-### Tech Stack
-- **Framework**: FastAPI (async Python web framework)
-- **Database**: PostgreSQL with SQLAlchemy ORM (async)
-- **Authentication**: JWT tokens with bcrypt password hashing
-- **Storage**: AWS S3 for image storage
-- **AI Services**: 
-  - NanoBanana for facial analysis
-  - Gemini AI for conversational chat
-- **Migrations**: Alembic
+## Architecture Overview
 
-### Key Design Patterns
-- **Repository Pattern**: Database access through models
-- **Service Layer**: Business logic separated from API routes
-- **Dependency Injection**: FastAPI's built-in DI for database sessions and auth
-- **Async/Await**: Full async support for better performance
+DermaLens is an AI-powered skincare analysis platform consisting of two components:
 
-## 🚀 Getting Started
+| Layer | Technology | Description |
+|-------|-----------|-------------|
+| **iOS Client** | SwiftUI, iOS 26.1 | Native app with 5-step analysis workflow |
+| **API Server** | FastAPI, Python 3.11+ | Stateless REST API, S3-backed persistence |
+| **AI Vision** | Gemini 2.5 Flash | Multi-angle facial skin analysis |
+| **AI Chat** | Gemini 2.5 Flash | Context-aware skincare guidance |
+| **Storage** | AWS S3 | Images and JSON data (no database) |
+| **Hosting** | AWS EC2 (t3.micro) | Single-instance deployment |
 
-### Method 1: Docker Compose (Recommended for Development)
-```bash
-# Clone repository
-git clone <your-repo>
-cd dermalens_backend
+### Key Design Decisions
 
-# Copy environment file
-cp .env.example .env
-# Edit .env with your API keys
+- **No database** -- all persistence is S3 JSON files, keeping the stack minimal.
+- **No authentication** -- users are identified by email (query parameter). Suitable for MVP/hackathon scope.
+- **No JWT/sessions** -- every request is stateless; the email parameter is the only identifier.
+- **Rule-based routines** -- skincare routines are generated locally (not by AI) using an ingredient engine with conflict detection.
+- **AI for analysis only** -- Gemini Vision scores skin metrics; Gemini Chat provides guidance. Neither prescribes or diagnoses.
 
-# Start everything
-docker-compose up -d
+---
 
-# Run migrations
-docker-compose exec api alembic upgrade head
+## Repository Structure
 
-# View logs
-docker-compose logs -f api
+```
+dermalens/
+├── backend/                          # FastAPI server
+│   ├── main.py                       # Application entry point
+│   ├── core/
+│   │   └── config.py                 # Settings (env vars, model names)
+│   ├── api/v1/
+│   │   ├── router.py                 # Route aggregator
+│   │   └── routes/
+│   │       ├── users.py              # Profile CRUD
+│   │       ├── scans.py              # Photo upload + AI analysis
+│   │       ├── routines.py           # Routine retrieval
+│   │       └── chat.py               # AI chat
+│   ├── schemas/                      # Pydantic request/response models
+│   │   ├── user.py
+│   │   ├── scan.py
+│   │   ├── routine.py
+│   │   └── chat.py
+│   └── services/
+│       ├── storage/s3_service.py     # S3 read/write operations
+│       ├── ai_pipeline.py            # Orchestrates vision + routine
+│       ├── vision/
+│       │   ├── gemini_vision_service.py  # Gemini structured output
+│       │   ├── validators.py         # Retake detection
+│       │   └── normalize.py          # Score clamping
+│       ├── scoring/
+│       │   ├── metrics.py            # SkinMetrics model
+│       │   └── trend.py              # Profile builder
+│       ├── routine_engine/
+│       │   ├── engine.py             # Rule-based routine builder
+│       │   ├── routine_generator.py  # Format adapter
+│       │   ├── conflicts.py          # Ingredient conflict rules
+│       │   ├── lock_policy.py        # Plan lock (2-week minimum)
+│       │   └── adjustment_rules.py   # Active back-off logic
+│       └── chat_ai/
+│           └── gemini_service.py     # Chat with context injection
+│
+├── frontend/dermalense/              # Xcode project
+│   └── dermalense/
+│       ├── DermaLensApp.swift        # App entry point
+│       ├── MainTabView.swift         # Tab navigation
+│       ├── Models.swift              # Data models + AppState
+│       ├── Theme.swift               # Design system tokens
+│       ├── Info.plist                # ATS exceptions, scene config
+│       ├── Services/
+│       │   ├── APIService.swift      # Networking layer
+│       │   └── APIError.swift        # Error types
+│       └── Views/
+│           ├── Onboarding/
+│           │   └── OnboardingView.swift
+│           ├── Dashboard/
+│           │   ├── DashboardView.swift
+│           │   ├── ConcernsFormView.swift
+│           │   ├── PhotoUploadView.swift
+│           │   ├── SkinAnalysisView.swift
+│           │   ├── RoutinePlanView.swift
+│           │   └── ChatView.swift
+│           └── Account/
+│               ├── AccountView.swift
+│               ├── EditProfileView.swift
+│               ├── FullHistoryView.swift
+│               └── HistoryDetailView.swift
+│
+├── requirements.txt                  # Python dependencies
+├── start.sh                          # Backend startup script
+├── .env                              # Environment variables (not committed)
+└── .gitignore
 ```
 
-Access:
-- API: http://localhost:8000
-- Docs: http://localhost:8000/api/v1/docs
-- pgAdmin: http://localhost:5050 (optional, use `docker-compose --profile tools up`)
+---
 
-### Method 2: Local Development
+## Getting Started
+
+### Prerequisites
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Xcode | 26.1+ | iOS build toolchain |
+| Python | 3.11+ | Backend runtime |
+| AWS CLI | 2.x | S3 bucket setup (optional) |
+| Git | 2.x | Version control |
+
+### Backend Setup
+
 ```bash
-# Create virtual environment
-python3.11 -m venv venv
+# Clone and enter the repository
+git clone git@github.com:compscibro/dermalens.git
+cd dermalens
+
+# Create and activate virtual environment
+python3 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Set up database
-createdb dermalens
-
-# Copy and configure environment
+# Configure environment variables
 cp .env.example .env
-# Edit .env with your settings
+# Edit .env with your credentials (see Environment Variables section)
 
-# Run migrations
-alembic upgrade head
-
-# Start server
-./start.sh
-# Or manually:
-uvicorn app.main:app --reload
+# Start the development server
+python -m backend.main
 ```
 
-## 🔄 API Flow Diagrams
+The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/api/v1/docs`.
 
-### User Registration & Authentication Flow
-```
-1. POST /api/v1/auth/register
-   → Validate email uniqueness
-   → Hash password
-   → Create user record
-   → Generate JWT token
-   → Return token + user data
+### iOS Setup
 
-2. POST /api/v1/auth/login
-   → Validate credentials
-   → Update last_login
-   → Generate JWT token
-   → Return token + user data
+1. Open `frontend/dermalense/dermalense.xcodeproj` in Xcode 26.1+.
+2. The project uses **PBXFileSystemSynchronizedRootGroup** -- new files are auto-discovered. No manual file reference management needed.
+3. Select the `dermalense` scheme and a simulator (iPhone 17 Pro recommended).
+4. Build and run (`Cmd + R`).
 
-3. Authenticated Requests
-   → Include: Authorization: Bearer <token>
-   → Middleware validates JWT
-   → Extracts user from token
-   → Injects current_user into endpoint
-```
-
-### Scan Submission Flow
-```
-1. Client: POST /api/v1/scans/presign (for each angle: front, left, right)
-   → Server generates S3 presigned URL
-   → Returns upload URL + image key
-
-2. Client: Uploads image directly to S3 using presigned URL
-   → S3 stores image
-   → Returns success
-
-3. Client: POST /api/v1/scans/submit
-   → With all three image keys
-   → Server creates Scan record (status: PENDING)
-   → Queues background processing
-   → Returns scan with ID
-
-4. Background Task: process_scan()
-   → Status → PROCESSING
-   → Generate presigned download URLs
-   → Call NanoBanana API with image URLs
-   → Parse and store analysis results
-   → Status → COMPLETED
-   → Calculate score deltas (if not baseline)
-```
-
-### Treatment Plan Creation Flow
-```
-1. User completes baseline scan
-2. POST /api/v1/routines/
-   → Validate no active plan exists
-   → Verify baseline scan is complete
-   → routine_engine.generate_routine()
-      → Analyze scores
-      → Select appropriate ingredients
-      → Build AM routine (cleanser → serum → moisturizer → SPF)
-      → Build PM routine (cleanser → treatment → serum → moisturizer)
-   → Create TreatmentPlan record (status: ACTIVE)
-   → Set lock period (14-28 days)
-   → Return plan with routines
-```
-
-### Weekly Scan & Progress Tracking
-```
-1. User takes weekly scan (minimum 7 days interval)
-2. POST /api/v1/scans/submit
-3. Background processing:
-   → Analyze images
-   → calculate_score_deltas()
-      → Find previous scan
-      → For each metric:
-         - Calculate delta
-         - Calculate percent change
-         - Determine improvement/worsening
-         - Flag if significant (>10% change)
-      → Store ScoreDelta records
-4. GET /api/v1/scans/{scan_id}/deltas
-   → Return all score comparisons
-   → Frontend displays progress charts
-```
-
-### Treatment Plan Adjustment Logic
-```
-PATCH /api/v1/routines/current
-
-Adjustment Triggers:
-1. SEVERE_IRRITATION (>20% score increase)
-   → Immediate adjustment allowed
-   
-2. SCORE_DECLINE (>10% increase in concern metric)
-   → Check latest score deltas
-   → Allow adjustment if decline confirmed
-   
-3. USER_REQUEST
-   → Only if plan.can_adjust == True
-   → Only after minimum lock period
-
-If adjustment allowed:
-→ Mark current plan as ADJUSTED
-→ Create new plan (version + 1)
-→ Generate new routines based on latest scan
-→ New lock period starts
-```
-
-### Chat with Context Flow
-```
-POST /api/v1/chat/message
-
-1. Build context:
-   → Get user profile
-   → Get active treatment plan (if any)
-      - Lock status
-      - Days remaining
-   → Get latest scan results
-   → Calculate score trends (improving/stable/worsening)
-
-2. Prepare conversation:
-   → Fetch last 20 messages from session
-   → Format for Gemini API
-
-3. Generate response:
-   → Send to Gemini with context
-   → Get AI response
-   → Flag if contains medical advice
-   → Flag if requires follow-up
-
-4. Store messages:
-   → Save user message
-   → Save AI response
-   → Link to current scan/plan
-
-5. Return AI response to user
-```
-
-## 🗄️ Database Schema
-
-### Users Table
-```sql
-users (
-    id SERIAL PRIMARY KEY,
-    email VARCHAR UNIQUE NOT NULL,
-    hashed_password VARCHAR NOT NULL,
-    full_name VARCHAR,
-    skin_type VARCHAR,  -- oily, dry, combination, sensitive
-    primary_concern VARCHAR,  -- acne, redness, dryness, oiliness
-    is_active BOOLEAN DEFAULT true,
-    is_verified BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP,
-    last_login TIMESTAMP
-)
-```
-
-### Scans Table
-```sql
-scans (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
-    status VARCHAR,  -- pending, processing, completed, failed
-    scan_date TIMESTAMP DEFAULT NOW(),
-    
-    -- S3 image storage
-    front_image_key VARCHAR NOT NULL,
-    left_image_key VARCHAR NOT NULL,
-    right_image_key VARCHAR NOT NULL,
-    front_image_url VARCHAR,
-    left_image_url VARCHAR,
-    right_image_url VARCHAR,
-    
-    -- AI analysis scores (0-100)
-    acne_score FLOAT,
-    redness_score FLOAT,
-    oiliness_score FLOAT,
-    dryness_score FLOAT,
-    texture_score FLOAT,
-    pore_size_score FLOAT,
-    dark_spots_score FLOAT,
-    overall_score FLOAT,
-    
-    -- Metadata
-    raw_analysis JSONB,
-    analysis_model_version VARCHAR,
-    confidence_score FLOAT,
-    processing_time_ms INTEGER,
-    error_message VARCHAR,
-    
-    -- Progress tracking
-    is_baseline BOOLEAN DEFAULT false,
-    week_number INTEGER,
-    
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP
-)
-```
-
-### Score Deltas Table
-```sql
-score_deltas (
-    id SERIAL PRIMARY KEY,
-    current_scan_id INTEGER REFERENCES scans(id),
-    previous_scan_id INTEGER REFERENCES scans(id),
-    
-    metric_name VARCHAR NOT NULL,  -- acne, redness, etc.
-    previous_score FLOAT,
-    current_score FLOAT,
-    delta FLOAT,  -- current - previous
-    percent_change FLOAT,
-    
-    improvement BOOLEAN,  -- true if better
-    is_significant BOOLEAN,  -- true if >threshold
-    
-    days_between_scans INTEGER,
-    treatment_plan_id INTEGER REFERENCES treatment_plans(id),
-    
-    created_at TIMESTAMP DEFAULT NOW()
-)
-```
-
-### Treatment Plans Table
-```sql
-treatment_plans (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
-    status VARCHAR,  -- active, completed, adjusted, cancelled
-    version INTEGER DEFAULT 1,
-    
-    primary_concern VARCHAR NOT NULL,
-    
-    -- Lock period
-    start_date DATE NOT NULL,
-    planned_end_date DATE NOT NULL,
-    actual_end_date DATE,
-    lock_duration_days INTEGER,
-    
-    baseline_scan_id INTEGER REFERENCES scans(id),
-    
-    -- Routines (JSONB arrays of steps)
-    am_routine JSONB NOT NULL,
-    pm_routine JSONB NOT NULL,
-    recommended_products JSONB,
-    
-    instructions TEXT,
-    warnings TEXT,
-    
-    -- Adjustment tracking
-    can_adjust BOOLEAN DEFAULT false,
-    adjustment_reason VARCHAR,
-    adjustment_notes TEXT,
-    previous_plan_id INTEGER REFERENCES treatment_plans(id),
-    
-    -- AI metadata
-    generation_model VARCHAR,
-    generation_prompt TEXT,
-    
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP
-)
-```
-
-### Chat Messages Table
-```sql
-chat_messages (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
-    role VARCHAR NOT NULL,  -- 'user' or 'assistant'
-    content TEXT NOT NULL,
-    
-    current_scan_id INTEGER REFERENCES scans(id),
-    current_plan_id INTEGER REFERENCES treatment_plans(id),
-    
-    reported_concerns JSONB,
-    
-    -- AI metadata
-    model_used VARCHAR,
-    tokens_used INTEGER,
-    response_time_ms INTEGER,
-    
-    -- Flags
-    contains_medical_advice BOOLEAN DEFAULT false,
-    requires_follow_up BOOLEAN DEFAULT false,
-    
-    session_id VARCHAR,
-    
-    created_at TIMESTAMP DEFAULT NOW()
-)
-```
-
-## 🔌 Service Integrations
-
-### AWS S3 Service (`app/services/storage/s3_service.py`)
-
-**Purpose**: Handle image storage and retrieval
-
-**Key Methods**:
-- `generate_image_key()`: Create unique S3 key for image
-- `generate_presigned_upload_url()`: Get URL for client-side upload
-- `generate_presigned_download_url()`: Get URL for image viewing
-- `check_image_exists()`: Verify image in S3
-- `delete_image()`: Remove image from S3
-
-**Configuration**:
-```python
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
-S3_BUCKET_NAME=dermalens-images
-AWS_REGION=us-east-1
-```
-
-**S3 Bucket Setup**:
-1. Create bucket in AWS Console
-2. Enable CORS:
-```json
-[{
-    "AllowedOrigins": ["*"],
-    "AllowedMethods": ["GET", "PUT", "POST"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag"]
-}]
-```
-3. Set bucket policy for presigned URLs
-
-### NanoBanana AI Service (`app/services/vision/nanobanana_service.py`)
-
-**Purpose**: Facial skin analysis using AI
-
-**Key Methods**:
-- `analyze_images()`: Submit images for analysis
-- `validate_image_quality()`: Pre-check image suitability
-- `_normalize_scores()`: Convert API response to 0-100 scale
-- `_calculate_overall_score()`: Weighted average of metrics
-
-**Expected API Response** (placeholder - adapt to actual API):
-```json
-{
-  "analysis": {
-    "acne": {"score": 45.2, "confidence": 0.95},
-    "redness": {"score": 32.1, "confidence": 0.93},
-    "oiliness": {"score": 67.8, "confidence": 0.91},
-    "dryness": {"score": 21.5, "confidence": 0.94}
-  },
-  "model_version": "1.2.3",
-  "confidence": 0.93
-}
-```
-
-### Gemini AI Service (`app/services/chat_ai/gemini_service.py`)
-
-**Purpose**: Conversational AI for skincare guidance
-
-**System Prompt**:
-- Acts as DermaLens AI assistant
-- Provides education, not diagnosis
-- Cannot modify treatment plans
-- Encourages routine adherence
-- Flags severe symptoms for medical attention
-
-**Context Building**:
-```python
-ChatContextInfo(
-    user_id=123,
-    user_name="Jane",
-    primary_concern="acne",
-    has_active_plan=True,
-    plan_locked=True,
-    days_remaining=10,
-    has_recent_scan=True,
-    latest_scan_date="2024-02-10",
-    latest_scores={"acne": 42.5, ...},
-    score_trends={"acne": "improving", ...}
-)
-```
-
-### Routine Engine (`app/services/routine_engine/routine_generator.py`)
-
-**Purpose**: Generate personalized skincare routines
-
-**Ingredient Database**:
-- Maps concerns to active ingredients
-- Includes concentrations and benefits
-- Provides supportive ingredients
-- Maintains conflict rules
-
-**Routine Structure**:
-```json
-{
-  "am_routine": [
-    {
-      "step_number": 1,
-      "product_type": "cleanser",
-      "instructions": "Use gentle salicylic acid cleanser...",
-      "wait_time_minutes": 0
-    },
-    // ... more steps
-  ],
-  "pm_routine": [...]
-}
-```
-
-**Conflict Rules**:
-- Retinol + Vitamin C/AHA/BHA = conflict
-- Benzoyl Peroxide + Retinol = conflict
-- Engine prevents combining conflicting actives
-
-## 🔬 Development Workflow
-
-### Adding a New Feature
-
-1. **Plan the Feature**
-   - Define requirements
-   - Design database changes
-   - Plan API endpoints
-
-2. **Update Models** (if needed)
-   ```bash
-   # Edit models in app/models/
-   # Create migration
-   alembic revision --autogenerate -m "add feature X"
-   # Review migration
-   # Apply migration
-   alembic upgrade head
-   ```
-
-3. **Create Schemas**
-   ```python
-   # Add to app/schemas/
-   class NewFeatureRequest(BaseModel):
-       field1: str
-       field2: int
-   
-   class NewFeatureResponse(BaseModel):
-       id: int
-       field1: str
-       created_at: datetime
-   ```
-
-4. **Add Business Logic**
-   ```python
-   # Add to appropriate service in app/services/
-   async def process_feature(data):
-       # Business logic here
-       pass
-   ```
-
-5. **Create API Endpoint**
-   ```python
-   # Add to appropriate router in app/api/v1/routes/
-   @router.post("/feature", response_model=NewFeatureResponse)
-   async def create_feature(
-       data: NewFeatureRequest,
-       current_user: User = Depends(get_current_active_user),
-       db: AsyncSession = Depends(get_db)
-   ):
-       # Endpoint logic
-       pass
-   ```
-
-6. **Test the Feature**
-   - Manual testing via /docs
-   - Write unit tests
-   - Integration tests
-
-7. **Update Documentation**
-   - Update README
-   - Add docstrings
-   - Update API examples
-
-### Database Migration Best Practices
+**Build from terminal:**
 
 ```bash
-# Always review auto-generated migrations
-alembic revision --autogenerate -m "description"
-# Edit the generated file in alembic/versions/
-
-# Test migration
-alembic upgrade head
-# Test rollback
-alembic downgrade -1
-# Re-apply
-alembic upgrade head
-
-# In production, use offline mode for safety
-alembic upgrade head --sql > migration.sql
-# Review SQL, then apply manually
+xcodebuild -scheme dermalense \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  build
 ```
 
-## 🧪 Testing Strategy
+### Environment Variables
 
-### Unit Tests
-```python
-# tests/test_services/test_routine_engine.py
-import pytest
-from app.services.routine_engine.routine_generator import routine_engine
-
-def test_generate_routine_for_acne():
-    scores = {"acne": 75, "redness": 30, "oiliness": 60, "dryness": 20}
-    routine = routine_engine.generate_routine("acne", scores)
-    
-    assert "am_routine" in routine
-    assert "pm_routine" in routine
-    assert len(routine["am_routine"]) >= 4  # cleanser, serum, moisturizer, SPF
-    assert any(step["product_type"] == "sunscreen" for step in routine["am_routine"])
-```
-
-### Integration Tests
-```python
-# tests/test_api/test_scans.py
-import pytest
-from httpx import AsyncClient
-
-@pytest.mark.asyncio
-async def test_submit_scan_flow(async_client: AsyncClient, auth_token):
-    # Test presign
-    response = await async_client.post(
-        "/api/v1/scans/presign",
-        json={"angle": "front", "content_type": "image/jpeg", "file_size": 1000000},
-        headers={"Authorization": f"Bearer {auth_token}"}
-    )
-    assert response.status_code == 200
-    
-    # Test submit
-    response = await async_client.post(
-        "/api/v1/scans/submit",
-        json={
-            "front_image_key": "test/front.jpg",
-            "left_image_key": "test/left.jpg",
-            "right_image_key": "test/right.jpg"
-        },
-        headers={"Authorization": f"Bearer {auth_token}"}
-    )
-    assert response.status_code == 201
-```
-
-## 🚀 Deployment Guide
-
-### Environment Setup
-
-1. **Production Environment Variables**
-```bash
-DEBUG=False
-DATABASE_URL=postgresql+asyncpg://prod_user:prod_pass@prod-db:5432/dermalens
-SECRET_KEY=<generate-strong-secret>
-AWS_ACCESS_KEY_ID=<prod-key>
-AWS_SECRET_ACCESS_KEY=<prod-secret>
-NANOBANANA_API_KEY=<prod-key>
-GEMINI_API_KEY=<prod-key>
-```
-
-2. **Database Setup**
-```bash
-# Create production database
-createdb dermalens_prod
-
-# Run migrations
-DATABASE_URL=<prod-url> alembic upgrade head
-```
-
-3. **Docker Deployment**
-```bash
-# Build production image
-docker build -t dermalens-api:latest .
-
-# Run with production settings
-docker run -d \
-  -p 8000:8000 \
-  --env-file .env.production \
-  --name dermalens-api \
-  dermalens-api:latest
-```
-
-4. **Using Gunicorn for Production**
-```bash
-gunicorn app.main:app \
-  -w 4 \
-  -k uvicorn.workers.UvicornWorker \
-  --bind 0.0.0.0:8000 \
-  --access-logfile - \
-  --error-logfile -
-```
-
-### Monitoring & Logging
-
-Add structured logging:
-```python
-# app/core/logging.py
-import logging
-from pythonjsonlogger import jsonlogger
-
-logger = logging.getLogger()
-logHandler = logging.StreamHandler()
-formatter = jsonlogger.JsonFormatter()
-logHandler.setFormatter(formatter)
-logger.addHandler(logHandler)
-logger.setLevel(logging.INFO)
-```
-
-### Health Checks
-
-Already implemented in `app/main.py`:
-```
-GET /health
-→ {"status": "healthy", "service": "DermaLens", "version": "1.0.0"}
-```
-
-### Performance Optimization
-
-1. **Database Connection Pooling** (already configured)
-2. **Async everywhere** (already implemented)
-3. **Redis caching** (future enhancement)
-4. **CDN for S3 images** (recommended)
-
-## 📞 Support & Troubleshooting
-
-### Common Issues
-
-**Issue: Database connection fails**
-```
-Solution: 
-- Check PostgreSQL is running
-- Verify DATABASE_URL format
-- Ensure asyncpg installed
-- Check firewall/network settings
-```
-
-**Issue: S3 upload fails**
-```
-Solution:
-- Verify AWS credentials
-- Check bucket CORS settings
-- Confirm bucket region matches AWS_REGION
-- Check bucket permissions
-```
-
-**Issue: Migration conflicts**
-```
-Solution:
-alembic downgrade -1  # Rollback
-# Fix migration file
-alembic upgrade head
-```
-
-### Getting Help
-
-- Check API docs: `/api/v1/docs`
-- Review logs: `docker-compose logs -f api`
-- Database inspection: `docker-compose exec db psql -U dermalens`
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AWS_ACCESS_KEY_ID` | Yes | -- | AWS IAM access key |
+| `AWS_SECRET_ACCESS_KEY` | Yes | -- | AWS IAM secret key |
+| `AWS_REGION` | No | `us-east-1` | S3 bucket region |
+| `S3_BUCKET_NAME` | No | `dermalens-bucket` | S3 bucket name |
+| `GEMINI_API_KEY` | Yes | -- | Google Gemini API key |
+| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Chat model identifier |
+| `GEMINI_VISION_MODEL` | No | `gemini-2.5-flash` | Vision model identifier |
 
 ---
 
-## 🎉 You're Ready!
+## Backend
 
-This backend provides a complete foundation for DermaLens. The architecture is:
-- ✅ Scalable
-- ✅ Well-structured
-- ✅ Production-ready
-- ✅ Fully documented
+### Services Architecture
 
-Happy coding! 🚀
+```
+Request → Route Handler → AI Pipeline → S3 Storage
+                              │
+                    ┌─────────┼──────────┐
+                    v         v          v
+              Gemini Vision  Scoring   Routine Engine
+              (analysis)    (profile)  (rule-based)
+```
+
+**AI Pipeline** (`services/ai_pipeline.py`) orchestrates the full scan flow:
+
+1. Sends images to **Gemini Vision** for structured skin metric extraction.
+2. Validates image quality (rejects low-confidence or flagged images with HTTP 422).
+3. Builds a **skin profile** from metrics + user quiz answers.
+4. Generates a **routine plan** using the local rule-based engine.
+5. Returns analysis, routine, and lock status.
+
+### S3 Data Layout
+
+All user data persists as JSON files and images in a single S3 bucket:
+
+```
+users/{email}/
+  profile.json
+  scans/{scan_id}/
+    front.jpg
+    left.jpg
+    right.jpg
+    analysis.json
+    routine.json
+    concerns.json
+    raw_metrics.json
+    plan.json
+  chat/{session_id}.json
+```
+
+### Routine Engine
+
+The routine engine is deterministic (not AI-generated). It selects active ingredients based on the user's priority concern and metric scores:
+
+| Priority | Active Ingredient | Frequency |
+|----------|------------------|-----------|
+| Acne (score >= 45) | Salicylic acid (BHA) | 2-3x/week |
+| Redness | Niacinamide 2-5% | Daily |
+| Texture | Lactic acid (AHA) | 1-2x/week |
+| Barrier/Dryness | Hyaluronic acid + ceramides | Daily |
+
+Safety rules reduce frequency for high-irritation-risk profiles. Ingredient conflicts (e.g., retinoid + strong acid) are enforced.
+
+---
+
+## iOS Frontend
+
+### State Management
+
+The app uses the **Observation** framework (iOS 17+), not the legacy `ObservableObject` pattern:
+
+```
+@Observable class AppState     →  Single source of truth
+@State private var ...         →  View-local state
+@Environment(AppState.self)    →  Dependency injection
+```
+
+> **Important:** `ObservableObject` + `@StateObject` + `@EnvironmentObject` does not compile with the project's strict concurrency settings (`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`). Always use `@Observable` + `@State` + `@Environment(Type.self)`.
+
+### Navigation Structure
+
+```
+DermaLensApp
+├── OnboardingView              (if !isOnboarded)
+└── MainTabView                 (if isOnboarded)
+    ├── Tab 1: DashboardView    (5-step wizard)
+    │   ├── ConcernsFormView    →  Skin type, concerns, sensitivity
+    │   ├── PhotoUploadView     →  3-photo capture + API upload
+    │   ├── SkinAnalysisView    →  AI metric results
+    │   ├── RoutinePlanView     →  AM/PM/weekly routine
+    │   └── ChatView            →  AI skincare guidance
+    └── Tab 2: AccountView
+        ├── EditProfileView     (sheet)
+        ├── FullHistoryView     (push)
+        └── HistoryDetailView   (push)
+```
+
+### Networking Layer
+
+`APIService` is a singleton that handles all backend communication:
+
+- **Timeouts:** 120s request / 180s resource (AI analysis is slow).
+- **Image compression:** Max 1024px dimension, 70% JPEG quality.
+- **Upload format:** Multipart form data (front, left, right images + concerns JSON).
+- **Date decoding:** ISO 8601 with optional fractional seconds.
+- **DTO pattern:** API responses are decoded into `*DTO` structs, then converted to domain models via `.toDomain()` extensions.
+- **Error handling:** HTTP 422 is treated as a retake-required response with specific reasons.
+
+### Design System
+
+Defined in `Theme.swift`:
+
+| Token | Values |
+|-------|--------|
+| **DLColor** | `.primaryFallback` (blue), `.secondaryFallback` (teal), `.accentFallback` (amber), `.surfaceFallback` (light gray) |
+| **DLFont** | `.largeTitle` (28pt bold rounded) through `.small` (11pt medium) |
+| **DLSpacing** | `.xs` (4) `.sm` (8) `.md` (16) `.lg` (24) `.xl` (32) `.xxl` (48) |
+| **DLRadius** | `.sm` (8) `.md` (12) `.lg` (16) `.xl` (24) `.full` (999) |
+
+### Dashboard Reset Flow
+
+The reset button (`arrow.counterclockwise`) in the Dashboard toolbar destroys and recreates all child views by changing a `flowId` UUID applied via `.id(flowId)` on the TabView. This forces SwiftUI to reset all `@State` in child views (form fields, selected photos, etc.) while preserving scan history in AppState.
+
+### Demo Mode
+
+The app currently runs in **demo mode**: `DermaLensApp.swift` clears the saved onboarding state on every launch, forcing the signup flow for presentation purposes. Remove the `.task { ... }` block in `DermaLensApp` to disable this.
+
+---
+
+## API Reference
+
+Base URL: `http://<host>:8000/api/v1`
+
+### Users
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/users/profile?email={email}` | Get profile (auto-creates if missing) |
+| `PUT` | `/users/profile?email={email}` | Update profile fields |
+
+### Scans
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/scans/upload?email={email}` | Upload 3 photos + concerns, run AI pipeline |
+| `GET` | `/scans/{scanId}?email={email}` | Get scan analysis results |
+| `GET` | `/scans/history/list?email={email}` | List all scans (summary records) |
+
+### Routines
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/routines/{scanId}?email={email}` | Get routine for a specific scan |
+| `GET` | `/routines/latest/plan?email={email}` | Get most recent routine |
+
+### Chat
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/chat/message?email={email}` | Send message, receive AI response |
+| `GET` | `/chat/history?email={email}&sessionId={id}` | Get chat history |
+
+### Health Check
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Returns `{"status": "healthy", "version": "2.0.0"}` |
+
+### Error Responses
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Invalid email, malformed JSON, missing parameters |
+| 404 | Scan, routine, or profile not found |
+| 422 | Image quality insufficient (retake required) |
+| 500 | Server error (check `server.log`) |
+
+---
+
+## Data Flow
+
+### Scan Upload (End-to-End)
+
+```
+iOS: ConcernsFormView
+  └─ User fills skin type, concerns, sensitivity
+  └─ Passes SkinConcernsForm to DashboardView
+
+iOS: PhotoUploadView
+  └─ User selects 3 photos (front, left 90deg, right 90deg)
+  └─ Photos compressed (1024px max, 70% JPEG)
+  └─ POST /scans/upload (multipart: front, left, right, concerns JSON)
+
+Backend: scans.py route handler
+  └─ Uploads images to S3
+  └─ Calls ai_pipeline.run_ai()
+      ├─ Gemini Vision: analyzes images → SkinMetrics
+      ├─ Validator: checks confidence >= 45%, retake flag
+      │   └─ If retake needed: returns HTTP 422
+      ├─ Scoring: builds skin profile from metrics + quiz
+      ├─ Engine: generates AM/PM routine based on profile
+      └─ Returns: analysis + routine + lock status
+  └─ Stores analysis, routine, concerns, metrics to S3
+  └─ Returns SkinScanSchema
+
+iOS: SkinAnalysisView
+  └─ Displays overall score (animated ring) + metric grid
+
+iOS: RoutinePlanView (fetched via GET /routines/{scanId})
+  └─ Displays morning/evening/weekly steps with timeline
+
+iOS: ChatView
+  └─ POST /chat/message with session context
+  └─ Backend injects latest scan + routine + concerns into Gemini prompt
+  └─ Returns AI response
+```
+
+### Metric Scoring
+
+Each metric is scored 0-100 (higher = more severe):
+
+| Metric | Icon | Color Ranges |
+|--------|------|-------------|
+| Acne | `circle.fill` | 0-25 green, 26-50 yellow, 51-75 orange, 76-100 red |
+| Redness | `flame.fill` | Same |
+| Oiliness | `drop.fill` | Same |
+| Dryness | `sun.max.fill` | Same |
+| Texture | `square.grid.3x3.fill` | Same |
+
+**Overall Score** = `100 - average(all metrics)` (higher is better).
+
+---
+
+## Deployment
+
+### EC2 Production Setup
+
+The backend runs on an AWS EC2 instance (`t3.micro`, `us-east-1`).
+
+**1. SSH into the instance:**
+
+```bash
+ssh -i dermalens-key.pem ec2-user@<public-ip>
+```
+
+**2. Export environment variables:**
+
+```bash
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_REGION="us-east-1"
+export S3_BUCKET_NAME="dermalens-bucket"
+export GEMINI_API_KEY="..."
+export GEMINI_MODEL="gemini-2.5-flash"
+```
+
+**3. Start the server (persistent):**
+
+```bash
+cd ~/dermalens
+source venv/bin/activate
+nohup python -m backend.main > server.log 2>&1 &
+```
+
+**4. Verify:**
+
+```bash
+curl http://localhost:8000/health
+```
+
+### Updating the iOS Base URL
+
+In `Services/APIService.swift`, update `baseURL` to point to the EC2 public IP:
+
+```swift
+self.baseURL = "http://<ec2-public-ip>:8000/api/v1"
+```
+
+In `Info.plist`, add an ATS exception for the EC2 IP under `NSAppTransportSecurity > NSExceptionDomains`.
+
+### EC2 Security Group
+
+Ensure the security group allows inbound traffic on port 8000:
+
+| Type | Protocol | Port | Source |
+|------|----------|------|--------|
+| Custom TCP | TCP | 8000 | 0.0.0.0/0 |
+| SSH | TCP | 22 | Your IP |
+
+### Restarting After SSH Disconnect
+
+The `nohup` command keeps the server running after SSH disconnect. To restart:
+
+```bash
+kill -9 $(lsof -t -i:8000)    # Kill existing process
+nohup python -m backend.main > server.log 2>&1 &
+```
+
+---
+
+## Troubleshooting
+
+### Backend
+
+| Issue | Solution |
+|-------|----------|
+| `Address already in use` | Kill existing process: `kill -9 $(lsof -t -i:8000)` |
+| `NoSuchBucket` | Verify `S3_BUCKET_NAME` env var is exported before starting server |
+| `Connection refused` on EC2 | Check security group allows port 8000; verify server is running with `ps aux \| grep python` |
+| 500 on scan upload | Check `server.log` for stack trace; most common cause is missing env vars |
+| `GEMINI_API_KEY` errors | Ensure the key is exported in the same shell session as the server |
+
+### iOS
+
+| Issue | Solution |
+|-------|----------|
+| Network error on physical device | `localhost` resolves to the phone itself. Use EC2 IP or Mac's LAN IP in `APIService.swift` |
+| `The request timed out` | EC2 may be unreachable. Verify with `curl http://<ip>:8000/health` from your machine |
+| Build error: `.quaternary` not a Color | Use `Color.secondary.opacity(0.4)` instead; `.quaternary` is a `ShapeStyle`, not `Color` |
+| Child view state not resetting | Ensure `.id(flowId)` is applied to the TabView in `DashboardView` |
+| `@EnvironmentObject` crash | This project uses `@Observable` + `@Environment(Type.self)`, not `ObservableObject` + `@EnvironmentObject` |
+| Image overflow in PhotoUploadView | Images use `GeometryReader` with explicit frame + `.clipped()` to prevent overflow |
+
+---
+
+## Dependencies
+
+### Backend (requirements.txt)
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| fastapi | 0.109.0 | Web framework |
+| uvicorn | 0.27.0 | ASGI server |
+| python-multipart | 0.0.6 | File upload handling |
+| pydantic | 2.5.3 | Data validation |
+| pydantic-settings | 2.1.0 | Environment config |
+| boto3 | 1.34.34 | AWS S3 SDK |
+| google-genai | >= 1.0.0 | Gemini AI SDK |
+| Pillow | >= 11.0.0 | Image processing |
+| python-dotenv | 1.0.1 | .env file loading |
+
+### iOS
+
+No third-party dependencies. The app uses only Apple frameworks:
+
+- **SwiftUI** -- UI framework
+- **PhotosUI** -- Image picker
+- **Observation** -- State management (`@Observable`)
+- **Foundation** -- Networking (`URLSession`), JSON (`JSONDecoder`)
