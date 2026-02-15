@@ -47,3 +47,6 @@ dynamodb-local/
 *.temp
 temp/
 tmp/
+
+# macOS
+.DS_Store

@@ -1,15 +1,13 @@
 """
-API v1 Router
-Combines all route modules
+API v1 Router — combines all route modules
 """
 from fastapi import APIRouter
 
-from backend.api.v1.routes import auth, scans, routines, chat
+from backend.api.v1.routes import users, scans, routines, chat
 
 api_router = APIRouter()
 
-# Include all route modules
-api_router.include_router(auth.router)
+api_router.include_router(users.router)
 api_router.include_router(scans.router)
 api_router.include_router(routines.router)
 api_router.include_router(chat.router)

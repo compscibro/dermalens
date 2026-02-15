@@ -1,13 +1,12 @@
 """
 AWS S3 storage service
-Handles image upload, presigned URLs, and retrieval
+Primary data store — all user data lives as JSON files and images in S3.
 """
 import boto3
+import json
 from botocore.exceptions import ClientError
-from typing import Optional, Dict
+from typing import Optional, List
 import logging
-from datetime import datetime, timedelta
-import uuid
 
 from backend.core.config import settings
 
@@ -15,168 +14,125 @@ logger = logging.getLogger(__name__)
 
 
 class S3Service:
-    """Service for AWS S3 operations"""
-    
+    """Service for all S3 operations — JSON storage, image upload, listing."""
+
     def __init__(self):
-        """Initialize S3 client"""
         self.s3_client = boto3.client(
-            's3',
+            "s3",
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_REGION
+            region_name=settings.AWS_REGION,
         )
-        self.bucket_name = settings.S3_BUCKET_NAME
-    
-    def generate_image_key(self, user_id: int, angle: str) -> str:
-        """
-        Generate unique S3 key for image
-        
-        Args:
-            user_id: User ID
-            angle: Image angle (front, left, right)
-        
-        Returns:
-            S3 object key
-        """
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:8]
-        return f"users/{user_id}/scans/{timestamp}_{angle}_{unique_id}.jpg"
-    
-    def generate_presigned_upload_url(
-        self,
-        image_key: str,
-        content_type: str,
-        expires_in: int = None
-    ) -> Dict[str, str]:
-        """
-        Generate presigned URL for uploading image
-        
-        Args:
-            image_key: S3 object key
-            content_type: MIME type of the file
-            expires_in: URL expiration in seconds
-        
-        Returns:
-            Dict with upload_url and fields
-        """
-        if expires_in is None:
-            expires_in = settings.S3_PRESIGNED_URL_EXPIRATION
-        
+        self.bucket = settings.S3_BUCKET_NAME
+
+    # --- JSON operations ---
+
+    def put_json(self, key: str, data: dict) -> None:
+        """Upload a JSON object to S3."""
+        self.s3_client.put_object(
+            Bucket=self.bucket,
+            Key=key,
+            Body=json.dumps(data, default=str),
+            ContentType="application/json",
+        )
+
+    def get_json(self, key: str) -> Optional[dict]:
+        """Download and parse a JSON object from S3. Returns None if not found."""
         try:
-            presigned_post = self.s3_client.generate_presigned_post(
-                Bucket=self.bucket_name,
-                Key=image_key,
-                Fields={"Content-Type": content_type},
-                Conditions=[
-                    {"Content-Type": content_type},
-                    ["content-length-range", 1, settings.MAX_IMAGE_SIZE_MB * 1024 * 1024]
-                ],
-                ExpiresIn=expires_in
-            )
-            
-            return {
-                "upload_url": presigned_post["url"],
-                "fields": presigned_post["fields"],
-                "image_key": image_key
-            }
-            
+            response = self.s3_client.get_object(Bucket=self.bucket, Key=key)
+            return json.loads(response["Body"].read().decode("utf-8"))
         except ClientError as e:
-            logger.error(f"Error generating presigned URL: {e}")
-            raise Exception(f"Failed to generate upload URL: {str(e)}")
-    
-    def generate_presigned_download_url(
-        self,
-        image_key: str,
-        expires_in: int = 3600
-    ) -> Optional[str]:
-        """
-        Generate presigned URL for downloading/viewing image
-        
-        Args:
-            image_key: S3 object key
-            expires_in: URL expiration in seconds
-        
-        Returns:
-            Presigned download URL
-        """
+            if e.response["Error"]["Code"] == "NoSuchKey":
+                return None
+            raise
+
+    # --- Image operations ---
+
+    def upload_image(self, key: str, image_data: bytes, content_type: str = "image/jpeg") -> str:
+        """Upload image bytes directly to S3. Returns the S3 key."""
+        self.s3_client.put_object(
+            Bucket=self.bucket,
+            Key=key,
+            Body=image_data,
+            ContentType=content_type,
+        )
+        return key
+
+    def get_image_bytes(self, key: str) -> Optional[bytes]:
+        """Download image bytes from S3."""
         try:
-            url = self.s3_client.generate_presigned_url(
-                'get_object',
-                Params={
-                    'Bucket': self.bucket_name,
-                    'Key': image_key
-                },
-                ExpiresIn=expires_in
+            response = self.s3_client.get_object(Bucket=self.bucket, Key=key)
+            return response["Body"].read()
+        except ClientError:
+            return None
+
+    def generate_presigned_download_url(self, key: str, expires_in: int = 3600) -> Optional[str]:
+        """Generate a presigned URL for downloading/viewing."""
+        try:
+            return self.s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket, "Key": key},
+                ExpiresIn=expires_in,
             )
-            return url
-            
         except ClientError as e:
             logger.error(f"Error generating presigned download URL: {e}")
             return None
-    
-    def check_image_exists(self, image_key: str) -> bool:
-        """
-        Check if image exists in S3
-        
-        Args:
-            image_key: S3 object key
-        
-        Returns:
-            True if image exists, False otherwise
-        """
-        try:
-            self.s3_client.head_object(
-                Bucket=self.bucket_name,
-                Key=image_key
-            )
-            return True
-        except ClientError:
-            return False
-    
-    def delete_image(self, image_key: str) -> bool:
-        """
-        Delete image from S3
-        
-        Args:
-            image_key: S3 object key
-        
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.s3_client.delete_object(
-                Bucket=self.bucket_name,
-                Key=image_key
-            )
-            logger.info(f"Deleted image: {image_key}")
-            return True
-        except ClientError as e:
-            logger.error(f"Error deleting image: {e}")
-            return False
-    
-    def get_image_metadata(self, image_key: str) -> Optional[Dict]:
-        """
-        Get image metadata from S3
-        
-        Args:
-            image_key: S3 object key
-        
-        Returns:
-            Image metadata dict
-        """
-        try:
-            response = self.s3_client.head_object(
-                Bucket=self.bucket_name,
-                Key=image_key
-            )
-            return {
-                "size": response.get("ContentLength"),
-                "content_type": response.get("ContentType"),
-                "last_modified": response.get("LastModified")
-            }
-        except ClientError as e:
-            logger.error(f"Error getting image metadata: {e}")
-            return None
+
+    # --- Listing ---
+
+    def list_prefixes(self, prefix: str) -> List[str]:
+        """List sub-folders (common prefixes) under a given prefix."""
+        response = self.s3_client.list_objects_v2(
+            Bucket=self.bucket, Prefix=prefix, Delimiter="/"
+        )
+        return [cp["Prefix"] for cp in response.get("CommonPrefixes", [])]
+
+    def list_keys(self, prefix: str) -> List[str]:
+        """List all object keys under a given prefix."""
+        response = self.s3_client.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+        return [obj["Key"] for obj in response.get("Contents", [])]
+
+    # --- Path helpers ---
+
+    @staticmethod
+    def user_prefix(email: str) -> str:
+        return f"users/{email}/"
+
+    @staticmethod
+    def profile_key(email: str) -> str:
+        return f"users/{email}/profile.json"
+
+    @staticmethod
+    def scan_prefix(email: str, scan_id: str) -> str:
+        return f"users/{email}/scans/{scan_id}/"
+
+    @staticmethod
+    def scans_prefix(email: str) -> str:
+        return f"users/{email}/scans/"
+
+    @staticmethod
+    def scan_image_key(email: str, scan_id: str, angle: str) -> str:
+        return f"users/{email}/scans/{scan_id}/{angle}.jpg"
+
+    @staticmethod
+    def concerns_key(email: str, scan_id: str) -> str:
+        return f"users/{email}/scans/{scan_id}/concerns.json"
+
+    @staticmethod
+    def analysis_key(email: str, scan_id: str) -> str:
+        return f"users/{email}/scans/{scan_id}/analysis.json"
+
+    @staticmethod
+    def routine_key(email: str, scan_id: str) -> str:
+        return f"users/{email}/scans/{scan_id}/routine.json"
+
+    @staticmethod
+    def chat_key(email: str, session_id: str) -> str:
+        return f"users/{email}/chat/{session_id}.json"
+
+    @staticmethod
+    def chat_prefix(email: str) -> str:
+        return f"users/{email}/chat/"
 
 
 # Singleton instance
