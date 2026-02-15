@@ -1,6 +1,6 @@
 # 🧴 DermaLens
 
-AI-powered skincare analysis that turns a few selfies into personalized routines. Snap three photos, answer a quick skin quiz, and receive metric-level analysis with a morning-and-evening plan — all in under a minute.
+AI-powered skincare analysis that turns a few selfies into personalized routines. Snap three photos, answer a quick skin quiz, and receive metric-level analysis with a morning, evening, and weekly plan — all in under a minute.
 
 ## ✨ Features
 
@@ -11,7 +11,7 @@ AI-powered skincare analysis that turns a few selfies into personalized routines
 - [x] **Image Quality Validation:** Automatically flags blurry or unusable photos and prompts a retake
 
 ### Personalized Skincare Routines
-- [x] **Morning & Evening Plans:** Step-by-step routines tailored to your metrics and concerns
+- [x] **Morning, Evening & Weekly Plans:** Three-part routines tailored to your metrics and concerns
 - [x] **Evidence-Based Ingredients:** Active ingredient selection backed by dermatological rules (BHA, AHA, niacinamide, ceramides)
 - [x] **Safety-First Logic:** Ingredient conflict detection and frequency reduction for sensitive skin
 - [x] **Plan Lock Policy:** Encourages sticking with a routine for at least two weeks before changes
@@ -157,13 +157,16 @@ All endpoints are prefixed with `/api/v1`.
 **Next**
 - [ ] HTTPS with a proper domain and SSL certificate
 - [ ] User authentication (JWT or OAuth)
+- [ ] Haptic feedback and sound effects throughout the app experience
 
 **Coming Soon**
-- [ ] Push notifications for routine reminders
+- [ ] **DermaLens Premium:** Unlimited AI chat access via paid subscription (free tier: 3 messages/day)
+- [ ] Push notifications for routine reminders and weekly scan prompts
+- [ ] Weekly streaks, milestone badges, and achievement sounds to reward consistency
 - [ ] Progress photos side-by-side comparison
-- [ ] Weekly scan reminders with trend summaries
 
 **Future Vision**
+- [ ] **Brand Partnerships:** Curated, science-backed product recommendations with in-app purchase links from partnered brands
 - [ ] Multi-user household support
 - [ ] Product barcode scanning and ingredient lookup
 - [ ] Integration with dermatologist referral services
