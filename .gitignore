@@ -1,2 +1,8 @@
 .env
 .venv
+face.jpg
+backend/.env
+backend/face.jpg
+backend/*.jpg
+backend/*.jpeg
+backend/*.png
